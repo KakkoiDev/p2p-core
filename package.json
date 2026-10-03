@@ -1,0 +1,59 @@
+{
+  "name": "p2p-core",
+  "version": "0.1.0",
+  "description": "Multiplayer for no-build browser games: other tabs, the internet, a local server with no internet, or QR-code pairing — one API, built on trystero.",
+  "type": "module",
+  "main": "./p2p-core.js",
+  "exports": {
+    ".": "./p2p-core.js",
+    "./extras/*": "./extras/*",
+    "./src/*": "./src/*",
+    "./server": "./server/server.js",
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "p2p-core": "./bin/p2p-core.js"
+  },
+  "files": [
+    "p2p-core.js",
+    "p2p-core.d.ts",
+    "src",
+    "extras",
+    "server",
+    "bin",
+    "vendor",
+    "examples",
+    "README.md",
+    "AGENTS.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "types": "./p2p-core.d.ts",
+  "scripts": {
+    "test": "node --test",
+    "test:browser": "node e2e/run.mjs",
+    "serve": "node bin/p2p-core.js serve ."
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/KakkoiDev/p2p-core.git"
+  },
+  "keywords": [
+    "p2p",
+    "webrtc",
+    "multiplayer",
+    "trystero",
+    "nostr",
+    "game",
+    "offline",
+    "lan"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "playwright-core": "1.56"
+  }
+}

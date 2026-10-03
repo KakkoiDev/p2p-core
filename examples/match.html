@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rock paper scissors — p2p-core matchmaking</title>
+  <style>
+    :root { --bg: #fbf7ec; --fg: #16130d; --muted: #5d5747; --line: #d6d0c2; }
+    @media (prefers-color-scheme: dark) { :root { --bg: #16140f; --fg: #f3efe6; --muted: #b9b2a2; --line: #3d3830; } }
+    body { margin: 0; background: var(--bg); color: var(--fg); font: 18px/1.45 system-ui, sans-serif; }
+    main { max-width: 520px; margin: 0 auto; padding: 16px; display: grid; gap: 12px; }
+    .moves { display: flex; gap: 8px; }
+    button { flex: 1; min-height: 64px; font: inherit; font-size: 1.6rem; color: inherit; background: transparent; border: 1px solid var(--line); border-radius: 12px; cursor: pointer; }
+    button:disabled { opacity: 0.4; cursor: default; }
+    input { width: 100%; min-height: 44px; font: inherit; color: inherit; background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 0 8px; box-sizing: border-box; }
+    #status { color: var(--muted); }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Rock paper scissors</h1>
+  <p>Send this link to one other person:</p>
+  <input id="link" readonly aria-label="Invite link">
+  <p id="status" role="status">Waiting for an opponent…</p>
+  <div class="moves">
+    <button data-move="rock" disabled aria-label="Rock">✊</button>
+    <button data-move="paper" disabled aria-label="Paper">✋</button>
+    <button data-move="scissors" disabled aria-label="Scissors">✌️</button>
+  </div>
+  <p id="score"></p>
+</main>
+<script type="module">
+  import { joinRoom } from '../p2p-core.js';
+  import { matchmake } from '../extras/matchmaking.js';
+
+  // Each link is its own match: the id after # names the room.
+  if (!location.hash) location.hash = crypto.randomUUID?.() || String(Math.random()).slice(2);
+  document.getElementById('link').value = location.href;
+
+  const room = joinRoom({ app: 'p2p-core-rps', room: `match-${location.hash.slice(1)}` });
+  const match = matchmake(room);
+  window.room = room;
+  window.match = match;
+
+  const status = document.getElementById('status');
+  const buttons = [...document.querySelectorAll('[data-move]')];
+  const beats = { rock: 'scissors', paper: 'rock', scissors: 'paper' };
+  let mine = null;
+  let theirs = null;
+  let score = [0, 0];
+
+  const enable = (on) => buttons.forEach((b) => { b.disabled = !on; });
+
+  function settle() {
+    if (!mine || !theirs) return;
+    const result = mine === theirs ? 'Draw' : beats[mine] === theirs ? 'You win' : 'You lose';
+    if (result === 'You win') score[0]++;
+    if (result === 'You lose') score[1]++;
+    status.textContent = `${result}: ${mine} vs ${theirs}. Pick again.`;
+    document.getElementById('score').textContent = `You ${score[0]} – ${score[1]} them`;
+    mine = theirs = null;
+    enable(true);
+  }
+
+  match.onMatch(() => { status.textContent = 'Opponent found. Pick!'; enable(true); });
+  match.onRoomFull(() => { status.textContent = 'Two people are already playing here. Open a new link.'; });
+  match.onOpponentLeave(() => { status.textContent = 'Your opponent left.'; enable(false); });
+  match.onError((message) => { status.textContent = message; });
+  // A real game would send a hash first and reveal later, so nobody can wait
+  // and read the other move. Kept simple here.
+  match.on('pick', (move) => {
+    if (!beats[move]) return;
+    theirs = move;
+    if (!mine) status.textContent = 'They have picked.';
+    settle();
+  });
+  for (const button of buttons) {
+    button.onclick = () => {
+      mine = button.dataset.move;
+      match.send('pick', mine);
+      enable(false);
+      status.textContent = theirs ? '' : 'Waiting for their pick…';
+      settle();
+    };
+  }
+</script>
+</body>
+</html>

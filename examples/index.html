@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>p2p-core playground</title>
+  <link rel="stylesheet" href="../extras/ui.css">
+  <style>
+    :root { --bg: #fbf7ec; --fg: #16130d; --muted: #5d5747; --line: #d6d0c2; --me: #2457d6; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #16140f; --fg: #f3efe6; --muted: #b9b2a2; --line: #3d3830; --me: #7ea2ff; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.45 system-ui, sans-serif; }
+    main { max-width: 760px; margin: 0 auto; padding: 16px; display: grid; gap: 12px; }
+    h1 { margin: 0; font-size: 1.4rem; }
+    .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    select, input, button { min-height: 44px; font: inherit; color: inherit; background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 0 12px; }
+    button { cursor: pointer; }
+    canvas { width: 100%; aspect-ratio: 16 / 10; border: 1px solid var(--line); border-radius: 12px; touch-action: none; background: color-mix(in srgb, var(--bg) 90%, var(--fg)); }
+    #log { margin: 0; padding: 0; list-style: none; max-height: 9em; overflow: auto; color: var(--muted); }
+    form { display: flex; gap: 8px; }
+    form input { flex: 1; min-width: 0; }
+    .hint { color: var(--muted); margin: 0; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>p2p-core playground</h1>
+  <p class="hint">Open this page in another tab, another browser, or on a phone. Move your dot by dragging or with the arrow keys.</p>
+  <div class="bar">
+    <label>Mode
+      <select id="mode">
+        <option value="auto">auto — everything available</option>
+        <option value="online">online — tabs + internet</option>
+        <option value="offline">offline — tabs + local server + pairing</option>
+        <option value="tabs">tabs — this browser only</option>
+      </select>
+    </label>
+    <button id="pair" type="button">Pair a device…</button>
+  </div>
+  <p id="status" class="p2p-badge"></p>
+  <canvas id="field" width="800" height="500" tabindex="0" aria-label="Playground: your dot and everyone else's"></canvas>
+  <form id="chat">
+    <input id="say" autocomplete="off" placeholder="Say something" aria-label="Message">
+    <button>Send</button>
+  </form>
+  <ul id="log" aria-live="polite"></ul>
+</main>
+<script type="module">
+  import { joinRoom } from '../p2p-core.js';
+  import { presence } from '../extras/presence.js';
+  import { connectionBadge } from '../extras/status-ui.js';
+  import { openPairing } from '../extras/pairing-ui.js';
+
+  // Everything is configurable from the address bar, which is also how the
+  // browser tests drive this page: ?mode=offline&room=x&sameBrowser=0 ...
+  const params = new URLSearchParams(location.search);
+  const flag = (name) => (params.has(name) ? params.get(name) !== '0' : true);
+  const mode = params.get('mode') || 'auto';
+  document.getElementById('mode').value = mode;
+  document.getElementById('mode').onchange = (e) => { params.set('mode', e.target.value); location.search = params; };
+
+  const options = {
+    app: 'p2p-core-playground',
+    room: params.get('room') || 'lobby',
+    mode,
+    allow: { sameBrowser: flag('sameBrowser'), sameNetwork: flag('sameNetwork'), otherNetworks: flag('otherNetworks') },
+    profile: { name: params.get('name') || `player-${Math.floor(Math.random() * 900 + 100)}` },
+  };
+  if (params.has('server')) options.server = params.get('server') === 'off' ? false : params.get('server');
+  if (params.has('relays')) options.relays = params.get('relays').split(',');
+  if (params.has('password')) options.password = params.get('password');
+
+  const room = joinRoom(options);
+  window.room = room;   // for the console, and the tests
+
+  const log = (text) => {
+    const li = document.createElement('li');
+    li.textContent = text;
+    document.getElementById('log').prepend(li);
+  };
+  const name = (id) => room.peer(id)?.profile?.name || id.slice(0, 4);
+
+  document.getElementById('status').replaceWith(connectionBadge(room));
+  room.onPeerJoin((id, peer) => log(`${peer.profile?.name || id.slice(0, 4)} joined (${peer.transport})`));
+  room.onPeerLeave((id, peer) => log(`${peer.profile?.name || id.slice(0, 4)} left`));
+  room.onError((err) => log(err.message));
+  room.onMessage('chat', (text, from) => { if (typeof text === 'string') log(`${name(from)}: ${text.slice(0, 200)}`); });
+
+  document.getElementById('chat').onsubmit = (event) => {
+    event.preventDefault();
+    const input = document.getElementById('say');
+    if (!input.value.trim()) return;
+    room.send('chat', input.value.trim());
+    log(`me: ${input.value.trim()}`);
+    input.value = '';
+  };
+  document.getElementById('pair').onclick = async () => {
+    try {
+      const id = await openPairing(room);
+      if (id) log(`paired with ${name(id)}`);
+    } catch (err) { log(err.message); }
+  };
+
+  // ---------------------------------------------------------------- dots
+  const canvas = document.getElementById('field');
+  const ctx = canvas.getContext('2d');
+  const me = { x: 100 + Math.random() * 600, y: 100 + Math.random() * 300 };
+  const players = presence(room, { hz: 15, round: true });
+  players.follow(() => me);
+  window.players = players;
+  document.addEventListener('visibilitychange', () => (document.hidden ? players.sleep() : players.wake()));
+
+  const move = (event) => {
+    const box = canvas.getBoundingClientRect();
+    me.x = ((event.clientX - box.left) / box.width) * canvas.width;
+    me.y = ((event.clientY - box.top) / box.height) * canvas.height;
+  };
+  canvas.addEventListener('pointerdown', (e) => { canvas.setPointerCapture(e.pointerId); move(e); });
+  canvas.addEventListener('pointermove', (e) => { if (e.buttons) move(e); });
+  canvas.addEventListener('keydown', (e) => {
+    const step = 20;
+    const d = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
+    if (!d) return;
+    e.preventDefault();
+    me.x = Math.max(0, Math.min(canvas.width, me.x + d[0]));
+    me.y = Math.max(0, Math.min(canvas.height, me.y + d[1]));
+  });
+
+  const style = getComputedStyle(document.documentElement);
+  function dot(x, y, colour, label) {
+    ctx.fillStyle = colour;
+    ctx.beginPath();
+    ctx.arc(x, y, 14, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = style.getPropertyValue('--fg');
+    ctx.font = '16px system-ui';
+    ctx.textAlign = 'center';
+    ctx.fillText(label, x, y - 22);
+  }
+  function frame() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (const { id, state } of players.all()) {
+      if (Number.isFinite(state?.x) && Number.isFinite(state?.y)) {
+        const hue = [...id].reduce((h, c) => h + c.charCodeAt(0), 0) % 360;
+        dot(state.x, state.y, `hsl(${hue} 65% 55%)`, name(id));
+      }
+    }
+    dot(me.x, me.y, style.getPropertyValue('--me'), 'you');
+    requestAnimationFrame(frame);
+  }
+  frame();
+</script>
+</body>
+</html>

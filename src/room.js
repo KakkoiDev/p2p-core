@@ -178,15 +178,20 @@ export function joinRoom(rawOptions) {
     if (plan[name]) transports.set(name, make[name](plan[name]));
   }
 
+  /** Every id each transport is connected to, siblings and refused peers included. */
+  const members = new Map();
+
   function contextFor(transport) {
+    const here = new Set();
+    members.set(transport.name, here);
     return {
       selfId,
       appId: app,
       roomId: roomKey,
       key: `${app}:${roomKey}`,
       kinds: () => [...kinds],
-      peerJoin: (id) => transportJoin(transport.name, id),
-      peerLeave: (id) => transportLeave(transport.name, id),
+      peerJoin: (id) => { here.add(id); transportJoin(transport.name, id); },
+      peerLeave: (id) => { here.delete(id); transportLeave(transport.name, id); },
       receive: (id, kind, data, meta) => receive(transport.name, id, kind, data, meta),
       stream: (id, stream, meta) => {
         if (records.get(id)?.state === 'accepted') events.emit('stream', stream, id, meta);
@@ -553,7 +558,11 @@ export function joinRoom(rawOptions) {
     const sending = [];
     for (const [name, ids] of groups) {
       stats.sent += ids.length;
-      try { sending.push(transports.get(name).send(kind, data, ids, meta)); } catch (err) { events.emit('error', err); }
+      // When this list is everybody the transport can reach, say "everybody"
+      // (trystero's null), as a trystero app would. Never otherwise: a
+      // broadcast would also reach refused peers and sibling tabs.
+      const everyone = to == null && [...(members.get(name) || [])].every((id) => ids.includes(id));
+      try { sending.push(transports.get(name).send(kind, data, everyone ? null : ids, meta)); } catch (err) { events.emit('error', err); }
     }
     return Promise.all(sending).then(() => undefined);
   }

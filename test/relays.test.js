@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { RELAYS } from '../p2p-core.js';
+import { REFUSING_RELAYS } from '../src/relays.js';
 
 test('the relay list is long enough that one dead relay is not a dead app', () => {
   assert.ok(RELAYS.length >= 8);
@@ -17,7 +18,14 @@ test('no relay is ever removed: older builds still dial them', () => {
     'wss://relay.primal.net', 'wss://nostr.mom', 'wss://offchain.pub', 'wss://eu.purplerelay.com',
     'wss://nostr.data.haus', 'wss://relay.fountain.fm', 'wss://relay.nostromo.social',
   ];
-  for (const url of published) assert.ok(RELAYS.includes(url), `${url} was removed; older builds still dial it`);
+  for (const url of published) {
+    if (REFUSING_RELAYS.includes(url)) continue;
+    assert.ok(RELAYS.includes(url), `${url} was removed; older builds still dial it`);
+  }
+});
+
+test('relays known to refuse our notes are not dialled', () => {
+  for (const url of REFUSING_RELAYS) assert.ok(!RELAYS.includes(url), `${url} refuses posts; it only adds console warnings`);
 });
 
 test('package.json and VERSION agree', async () => {

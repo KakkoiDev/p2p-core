@@ -326,7 +326,9 @@ your service worker's list and bump its cache version.
 
 `RELAYS` is shared by every p2p-core app, and only ever grows. Two players meet only on a relay
 they both dial, and a player on a cached older build still dials the old list: removing an entry
-strands them. `test/relays.test.js` enforces it. Passing your own `relays` is allowed, but then
+strands them. `test/relays.test.js` enforces it. The one exception is a relay that refuses our
+notes: it was never a meeting place, so it moves to `REFUSING_RELAYS` (in `src/relays.js`) with the
+evidence, and stops filling every player's console with warnings. Passing your own `relays` is allowed, but then
 only players with an overlapping list find you.
 
 trystero opens its relays once per page, with the first room's list. A second room in the same

@@ -108,7 +108,8 @@ export function relaysTransport({
       register(kind);
       const send = actions.get(kind);
       if (!send) return undefined;
-      return send(data, ids || null, meta);
+      // trystero takes one id as a string, several as an array, everyone as null.
+      return send(data, !ids ? null : ids.length === 1 ? ids[0] : ids, meta);
     },
     stop() {
       clearInterval(poll);

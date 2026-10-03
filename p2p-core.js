@@ -11,6 +11,8 @@
  */
 export { joinRoom, planTransports, VERSION } from './src/room.js';
 export { RELAYS } from './src/relays.js';
+/** This page's id on the relays: what every room in this page is called, unless given `selfId`. */
+export { selfId } from './vendor/trystero/nostr.js';
 export { createTestNetwork } from './src/transports/memory.js';
 export { detectServer } from './src/transports/server.js';
 export { classifyCandidates } from './src/route.js';

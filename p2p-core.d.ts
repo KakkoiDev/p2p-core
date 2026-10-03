@@ -2,6 +2,9 @@
 
 export const VERSION: string;
 
+/** This page's id: what every room in this page is called (trystero's selfId). */
+export const selfId: string;
+
 /** The shared public nostr relay list. Append-only: see src/relays.js. */
 export const RELAYS: readonly string[];
 

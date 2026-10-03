@@ -9,6 +9,8 @@
  *   1. ONLY EVER ADD. A player running a cached older build still dials the
  *      old list. Removing an entry strands them on a relay newer builds no
  *      longer join. Service workers keep old builds alive for a visit or two.
+ *      The one exception is a relay that refuses our notes: it was never a
+ *      meeting place, so it moves to REFUSING_RELAYS below, with the evidence.
  *
  *   2. KEEP IT LONG. These are volunteer relays that come and go; matchmaking
  *      survives until the last one stops answering.
@@ -28,5 +30,16 @@ export const RELAYS = Object.freeze([
   'wss://eu.purplerelay.com',
   'wss://nostr.data.haus',
   'wss://relay.fountain.fm',
-  'wss://relay.nostromo.social',
+]);
+
+/**
+ * Relays that refuse our notes. They carry no rendezvous, so leaving them out
+ * strands nobody — the one way an entry may leave RELAYS — and dialling them
+ * fills every player's console with trystero's "relay failure" warnings.
+ * kakkoi-online's FAILURES.md (2026-08-16) recorded each refusal.
+ */
+export const REFUSING_RELAYS = Object.freeze([
+  'wss://relay.nostromo.social',   // "blocked: not on white-list"
+  'wss://nostr.grooveix.com',      // "blocked: only certain pubkeys are allowed to post"
+  'wss://relay.nostraddress.com',  // "auth-required: authenticate to publish events"
 ]);

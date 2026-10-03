@@ -16,4 +16,6 @@ First release.
 - Extras: matchmaking (from schness), presence (from kakkoi-online), shared state, pairing dialog,
   connection badge, QR draw/scan.
 - CLI: `serve`, `vendor`, `files`, `version`.
-- The shared, append-only relay list (the union of schness's and kakkoi-online's).
+- The shared, append-only relay list: the union of schness's and kakkoi-online's, minus the relays
+  kakkoi-online recorded refusing our notes (`REFUSING_RELAYS`).
+- `selfId` (this page's id) is exported.

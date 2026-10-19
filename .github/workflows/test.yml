@@ -10,10 +10,23 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - run: npm ci
-      - run: npm test
+      - name: Unit and integration tests
+        run: npm test
+      - name: Scenario journeys (two peers on the in-memory network)
+        run: npm run test:e2e
       - run: npx playwright-core install --with-deps chromium
-      - name: Browser checks
+      - name: Browser scenarios
         run: |
           export CHROMIUM=$(node -e "console.log(require('playwright-core').chromium.executablePath())")
           npm run test:browser
+      - name: 'Testing protocol (test-core): scenarios ran and passed, control coverage, flaky patterns'
+        run: npm run test:protocol
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: test-output
+          path: .test-output/

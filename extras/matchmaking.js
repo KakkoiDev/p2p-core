@@ -133,6 +133,13 @@ export function matchmake(room, {
   function announceWaiting() { if (phase === 'waiting') sendHello(packet({ waiting: true })); }
   function seek() {
     if (phase !== 'waiting') return;
+    // Two others may have matched while we were pending with one of them: their
+    // "unavailable" hellos arrived then, and nobody announces again.
+    if (roomIsFull(peers)) {
+      phase = 'full';
+      fire('full');
+      return;
+    }
     const candidate = chooseHostCandidate(selfId, peers);
     if (!candidate) return;
     phase = 'pending-host';

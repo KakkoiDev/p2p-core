@@ -6,7 +6,7 @@
   full (before, it waited forever: the matched pair never announces again). Found by the new
   scenario journey "A third player is told the room is full and never hears the game".
 - Testing protocol from test-core: `SCENARIOS.md` per module, one e2e test per scenario, control
-  coverage and flaky lint in CI (`tools/test-core/`).
+  coverage and flaky lint in CI (test-core adopted into `test-core/` with its adopt kit).
 
 ## 0.1.0 — 2026-10-03
 

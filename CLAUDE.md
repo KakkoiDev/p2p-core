@@ -12,7 +12,7 @@
 - `npm test` (Node) and `npm run test:browser` (Chromium; `CHROMIUM=/path` if not at
   `/opt/pw-browsers/chromium`) must both pass. The browser run is the only check of real WebRTC,
   pairing and trystero signalling (through `e2e/nostr-relay.mjs`).
-- Testing protocol (test-core, vendored in `tools/test-core/`): a feature or behaviour change adds or edits its
+- Testing protocol (test-core, pinned in `test-core/` (adopted with test-core's `adopt/adopt.py`; the commit is in `test-core/MANIFEST.json`)): a feature or behaviour change adds or edits its
   Given/When/Then scenario in the `SCENARIOS.md` next to it (`### Scenario: <title>`, then Given/When/Then lines) and
   one e2e test with exactly that title (`e2e/journeys.test.js` for two peers on the in-memory network,
   `e2e/browser.spec.mjs` for anything on a page). Find controls by role or label; a new control needs a step, and

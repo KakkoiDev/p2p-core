@@ -8,7 +8,7 @@
  * Separate browser *contexts* stand in for separate browsers: they share no BroadcastChannel, so whatever connects
  * them is the network. Offline: a web request to a host other than this machine is refused and fails the run; a
  * socket to one is refused.
- * Controls are found by role and label (test-core's e2e rule: tools/test-core/e2e_coverage.py reads these locators);
+ * Controls are found by role and label (test-core's e2e rule: test-core/tools/e2e_coverage.py reads these locators);
  * the pairing dialog is built by script, so its markup is saved to .test-output/dom/ for that check. No fixed waits:
  * every step waits for the state it needs.
  */
@@ -102,7 +102,7 @@ async function say(page, text) {
   await page.getByRole('button', { name: 'Send' }).click();
 }
 
-/** The pairing dialog's markup, for tools/test-core/e2e_coverage.py (the dialog only exists while it is open). */
+/** The pairing dialog's markup, for test-core/tools/e2e_coverage.py (the dialog only exists while it is open). */
 async function snapshot(page, name) {
   const html = await page.locator('dialog.p2p-dialog').evaluate((d) => d.outerHTML);
   writeFileSync(path.join(DOM, `pairing-${name}.html`), `<!-- the pairing dialog, saved by e2e/browser.spec.mjs -->\n${html}\n`);

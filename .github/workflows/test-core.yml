@@ -1,0 +1,44 @@
+# test-core's checks for this repository (added by test-core's adopt/adopt.py; edit the env block, keep the steps).
+# The project's own test job runs its unit, integration and e2e tests; this job checks the rules around them.
+name: test-core
+on: [push, pull_request]
+permissions:
+  contents: read
+env:
+  TASKS: 'tasks/*.md'                    # none here: the modules' SCENARIOS.md are checked with --junit by test.yml (npm run test:protocol)
+  VOCAB: 'test-core/vocabulary.json test-core/functional/blocks/vocabulary.json'
+  PAGES: 'examples/*.html'               # the pages a person uses (HTML or server templates)
+  E2E_TESTS: 'e2e/*.mjs e2e/*.js'        # e2e tests and page objects, test blocks included
+  TEST_DIRS: 'test e2e'                  # folders the flaky lint reads
+jobs:
+  test-core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: test-core is the pinned copy, not edited in place
+        run: python3 test-core/adopt.py --verify test-core
+      - name: No fixed waits, focused tests or real hosts in tests
+        run: python3 test-core/tools/flaky_lint.py $TEST_DIRS
+      - name: Scenarios use only known steps
+        run: |
+          shopt -s globstar nullglob
+          status=0
+          for task in $TASKS; do
+            grep -q '^## Scenarios' "$task" || continue
+            python3 test-core/tools/vocab.py check "$task" --vocab $VOCAB || status=1
+          done
+          exit $status
+      - name: Every scenario has its test (add --junit <report> once the test job uploads its JUnit report)
+        run: |
+          shopt -s globstar nullglob
+          status=0
+          for task in $TASKS; do
+            grep -q '^## Scenarios' "$task" || continue
+            python3 test-core/tools/scenarios.py check "$task" --tests $E2E_TESTS || status=1
+          done
+          exit $status
+      # The E2E rule runs in test.yml (npm run test:protocol), after the browser run: the pairing dialog is built by
+      # script, so its controls exist only in the markup that run saves to .test-output/dom/.

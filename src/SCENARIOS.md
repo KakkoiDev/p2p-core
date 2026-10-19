@@ -2,7 +2,7 @@
 
 What a game gets from one `joinRoom` call, as Given/When/Then scenarios. Each one is an end-to-end test of the same
 title in `e2e/journeys.test.js`: real rooms on the in-memory test network (`createTestNetwork()`), no browser, no
-internet. `python3 tools/test-core/scenarios.py check src/SCENARIOS.md --tests e2e/journeys.test.js` proves every
+internet. `python3 test-core/tools/scenarios.py check src/SCENARIOS.md --tests e2e/journeys.test.js` proves every
 scenario has its test; CI also requires that each one ran and passed.
 
 ### Scenario: Two players meet in a room

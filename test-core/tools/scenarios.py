@@ -1,20 +1,28 @@
 #!/usr/bin/env python3
-"""Given/When/Then scenarios in a task file -> one end-to-end test each, named after the scenario's title.
+"""Given/When/Then scenarios in a task file -> one end-to-end test each, named after the scenario's heading.
 
   python3 tools/scenarios.py list TASK.md [--json]
   python3 tools/scenarios.py skeleton TASK.md --lang python|js     # print a test file to fill in
   python3 tools/scenarios.py check TASK.md --tests FILE... [--junit REPORT.xml...]
 
-A scenario in the task file (Markdown list or a ```gherkin block; "And"/"But" continue the step above):
+A scenario in the task file's `## Scenarios` section (Markdown list, plain lines or a ```gherkin block; "And"/"But"
+continue the step above). The recommended heading is `### <ID> <title>`: an optional story id (US-312, or US-new while
+the story is not written), then the title, with an optional `Scenario:` prefix. `### Scenario: <title>` (anywhere in
+the file) and `### <title>` (inside `## Scenarios`) keep working.
 
-  ### Scenario: Add a task
+  ## Scenarios
+
+  ### US-12 Add a task
   - Given I am signed in with an empty list
   - When I add the task "Buy milk"
   - Then I see "Buy milk" in the list
 
-The test for it is named after its title:
-  Python      @pytest.mark.scenario("Add a task")  def test_add_a_task(...)   (either one is enough)
-  JavaScript  test('Add a task', async ({ page }) => { ... })
+The test for it is named after its heading (with or without the id), or is the story with that id and title:
+  Python      @pytest.mark.scenario("US-12 Add a task")  def test_us_12_add_a_task(...)   (either one is enough)
+  JavaScript  test('US-12 Add a task', ...)  or  story('US-12', 'Add a task', ...)
+  Without an id: @pytest.mark.scenario("Add a task") / def test_add_a_task / test('Add a task', ...).
+A test file that runs the task file through functional/ (scenario_tests, load_scenarios, loadScenarios) and names the
+task file implements all its scenarios; --junit still requires each one to have run and passed.
 
 `check` exits 1 when a scenario has no test, or (with --junit) when its test did not run and pass. Standard library
 only.
@@ -30,6 +38,11 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 SCENARIO = re.compile(r"^\s*(?:[-*]\s+)?(?:#+\s*)?Scenario(?: Outline)?:\s*(?P<title>.+?)\s*#*\s*$", re.IGNORECASE)
+SECTION = re.compile(r"^\s*##\s+(?P<name>[^#].*?)\s*$")
+HEADING = re.compile(r"^\s*###\s+(?:Scenario(?: Outline)?:\s*)?(?P<title>.+?)\s*#*\s*$", re.IGNORECASE)
+SCENARIO_ID = re.compile(r"^(?P<id>[A-Z][A-Z0-9]*-(?:\d+|new))\b[\s:]*(?P<title>.+)$")
+STORY = re.compile(r"""\bstory\(\s*(?P<q>['"`])(?P<id>[A-Z][A-Z0-9]*-\d+)(?P=q)\s*,\s*(?P<q2>['"`])(?P<title>(?:\\.|(?!(?P=q2)).)*)(?P=q2)""")
+RUNS_TASK = re.compile(r"\b(?:scenario_tests|load_scenarios|loadScenarios)\(")
 STEP = re.compile(r"^\s*(?:[-*]\s+)?(?P<keyword>Given|When|Then|And|But)\s+(?P<text>.+?)\s*$", re.IGNORECASE)
 PY_MARK = re.compile(r"""@pytest\.mark\.scenario\(\s*(?P<q>['"])(?P<title>.+?)(?P=q)\s*\)""")
 PY_DEF = re.compile(r"^\s*(?:async\s+)?def\s+(?P<name>test_\w+)\s*\(", re.MULTILINE)
@@ -38,19 +51,36 @@ JS_TEST = re.compile(r"""\btest(?:\.(?:only|fixme|fail|slow))?\(\s*(?P<q>['"`])(
 
 @dataclass
 class Scenario:
-    title: str
+    title: str  # without the id
+    id: str | None = None
     given: list[str] = field(default_factory=list)
     when: list[str] = field(default_factory=list)
     then: list[str] = field(default_factory=list)
+
+
+    @property
+    def name(self) -> str:
+        """The heading without `Scenario:`: "US-12 Add a task", or "Add a task" without an id."""
+        return f"{self.id} {self.title}" if self.id else self.title
+
+
+def split_heading(heading: str) -> tuple[str | None, str]:
+    match = SCENARIO_ID.match(heading.strip())
+    return (match["id"], match["title"].strip()) if match else (None, heading.strip())
 
 
 def parse(text: str) -> list[Scenario]:
     """Every scenario in a task file, in order."""
     scenarios: list[Scenario] = []
     current_part = None
+    in_section = False
     for line in text.splitlines():
-        if match := SCENARIO.match(line):
-            scenarios.append(Scenario(match["title"]))
+        if section := SECTION.match(line):
+            in_section = section["name"].lower().startswith("scenarios")
+            continue
+        if match := (SCENARIO.match(line) or (HEADING.match(line) if in_section else None)):
+            ident, title = split_heading(match["title"])
+            scenarios.append(Scenario(title, ident))
             current_part = None
         elif scenarios and (match := STEP.match(line)):
             keyword = match["keyword"].lower()
@@ -70,15 +100,28 @@ def python_name(title: str) -> str:
 
 
 def test_titles(path: Path) -> set[str]:
-    """Scenario titles a test file implements (marker strings, test function names, JS test titles)."""
+    """Scenario names a test file implements (marker strings, test function names, JS test titles, stories)."""
     text = path.read_text(encoding="utf-8")
     if path.suffix == ".py":
         return {m["title"] for m in PY_MARK.finditer(text)} | {m["name"] for m in PY_DEF.finditer(text)}
-    return {m["title"].replace(f"\\{m['q']}", m["q"]) for m in JS_TEST.finditer(text)}
+    titles = {m["title"].replace(f"\\{m['q']}", m["q"]) for m in JS_TEST.finditer(text)}
+    return titles | {f"{m['id']} {m['title']}" for m in STORY.finditer(text)}
+
+
+def runs_task(path: Path, task: Path) -> bool:
+    """The test file runs the task file through functional/ (scenario_tests, load_scenarios, loadScenarios)."""
+    text = path.read_text(encoding="utf-8")
+    return bool(RUNS_TASK.search(text)) and task.name in text
+
+
+def keys(scenario: Scenario) -> list[str]:
+    """The test names that implement a scenario: its heading and its title, as written and as a Python name."""
+    names = [scenario.name, scenario.title]
+    return list(dict.fromkeys(names + [python_name(n) for n in names]))
 
 
 def implemented(scenario: Scenario, names: set[str]) -> bool:
-    return scenario.title in names or python_name(scenario.title) in names
+    return any(key in names for key in keys(scenario))
 
 
 def junit_results(paths: list[Path]) -> dict[str, bool]:
@@ -98,8 +141,8 @@ def skeleton(scenarios: list[Scenario], lang: str, source: str) -> str:
         out = [f'"""End-to-end tests for {source}: one test per scenario, named after its title."""',
                "import pytest", "from playwright.sync_api import expect", ""]
         for s in scenarios:
-            out += ["", f"@pytest.mark.scenario({json.dumps(s.title, ensure_ascii=False)})",
-                    f"def {python_name(s.title)}(signed_in_page):"]
+            out += ["", f"@pytest.mark.scenario({json.dumps(s.name, ensure_ascii=False)})",
+                    f"def {python_name(s.name)}(signed_in_page):"]
             out += [f"    # Given {step}" for step in s.given] or ["    # Given"]
             out += [f"    # When {step}" for step in s.when] or ["    # When"]
             out += [f"    # Then {step}" for step in s.then] or ["    # Then"]
@@ -108,7 +151,7 @@ def skeleton(scenarios: list[Scenario], lang: str, source: str) -> str:
     out = [f"// End-to-end tests for {source}: one test per scenario, named after its title.",
            "import { test, expect } from './fixtures.js';", ""]
     for s in scenarios:
-        out += [f"test({json.dumps(s.title, ensure_ascii=False)}, async ({{ signedInPage: page }}) => {{"]
+        out += [f"test({json.dumps(s.name, ensure_ascii=False)}, async ({{ signedInPage: page }}) => {{"]
         out += [f"  // Given {step}" for step in s.given] or ["  // Given"]
         out += [f"  // When {step}" for step in s.when] or ["  // When"]
         out += [f"  // Then {step}" for step in s.then] or ["  // Then"]
@@ -120,15 +163,18 @@ def check(task: Path, tests: list[Path], reports: list[Path]) -> tuple[list[dict
     scenarios = parse(task.read_text(encoding="utf-8"))
     names: dict[str, list[str]] = {}
     for path in tests:
-        for name in test_titles(path):
+        found = test_titles(path)
+        if runs_task(path, task):
+            found |= {key for s in scenarios for key in keys(s)}
+        for name in found:
             names.setdefault(name, []).append(str(path))
     results = junit_results(reports) if reports else None
     rows, ok = [], bool(scenarios)
     for s in scenarios:
-        files = names.get(s.title, []) + names.get(python_name(s.title), [])
-        row = {"scenario": s.title, "tests": sorted(set(files)), "status": "has a test" if files else "no test"}
+        files = [f for key in keys(s) for f in names.get(key, [])]
+        row = {"scenario": s.name, "tests": sorted(set(files)), "status": "has a test" if files else "no test"}
         if files and results is not None:
-            ran = [results[key] for key in (s.title, python_name(s.title)) if key in results]
+            ran = [results[key] for key in keys(s) if key in results]
             row["status"] = "passed" if ran and all(ran) else ("failed" if ran else "did not run")
         ok = ok and row["status"] in ("has a test", "passed")
         rows.append(row)
@@ -154,10 +200,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "list":
         scenarios = parse(args.task.read_text(encoding="utf-8"))
         if args.json:
-            print(json.dumps([asdict(s) for s in scenarios], ensure_ascii=False, indent=2))
+            print(json.dumps([{**asdict(s), "name": s.name} for s in scenarios], ensure_ascii=False, indent=2))
         else:
             for s in scenarios:
-                print(f"Scenario: {s.title}  ({len(s.given)} given, {len(s.when)} when, {len(s.then)} then)")
+                print(f"Scenario: {s.name}  ({len(s.given)} given, {len(s.when)} when, {len(s.then)} then)")
         return 0 if scenarios else 1
     if args.command == "skeleton":
         print(skeleton(parse(args.task.read_text(encoding="utf-8")), args.lang, args.task.name), end="")
@@ -167,7 +213,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"ok": ok, "scenarios": rows}, ensure_ascii=False, indent=2))
     else:
         if not rows:
-            print(f"{args.task}: no scenarios found (### Scenario: <title>, then Given/When/Then lines)")
+            print(f"{args.task}: no scenarios found (## Scenarios, then ### <ID> <title> and Given/When/Then lines)")
         for row in rows:
             where = ", ".join(row["tests"]) or "-"
             print(f"{'ok ' if row['status'] in ('has a test', 'passed') else 'NO '} {row['scenario']}: {row['status']} ({where})")

@@ -304,6 +304,15 @@ CALLS = {
     "text": re.compile(r"\.(?:get_by_text|getByText)\(\s*" + VALUE + r"(?P<rest>[^\n]*)"),
     "css_testid": re.compile(r"""\[data-test-?id\s*=\s*\\?['"]?(?P<s>[^'"\]\\]+)\\?['"]?\]"""),
 }
+# test-core's functional primitive: control(page, role="button", name="Add") / control(page, { role: 'button', ... })
+CONTROL_CALL = re.compile(r"\bcontrol\((?P<args>[^\n]*)")
+CONTROL_ARGS = {
+    "role": re.compile(r"\brole\s*[:=]\s*" + STRING),
+    "label": re.compile(r"\blabel\s*[:=]\s*" + VALUE),
+    "testid": re.compile(r"\btest_?[iI]d\s*[:=]\s*" + STRING),
+    "text": re.compile(r"\btext\s*[:=]\s*" + VALUE),
+}
+CONTROL_NAME = re.compile(r"\bname\s*[:=]\s*" + VALUE)
 ROLE_NAME = re.compile(r"""^\s*,\s*(?:\{[^}]*?\bname\s*:\s*|[^)]*?\bname\s*=\s*)""" + VALUE)
 EXACT = re.compile(r"""\bexact\s*[:=]\s*(?:true|True)\b""")
 PY_TEST = re.compile(r"^\s*(?:async\s+)?def\s+(test_\w+)\s*\(")
@@ -362,7 +371,34 @@ def parse_tests(path: str) -> list[Ref]:
                     ref.value, ref.regex, ref.pattern = value_of(m)
                     ref.exact = bool(EXACT.search(m.groupdict().get("rest") or ""))
                 refs.append(ref)
+        if ref := control_ref(path, number, current, line):
+            refs.append(ref)
     return refs
+
+
+def control_ref(path: str, number: int, current: str, line: str) -> Ref | None:
+    """A Ref for a test-core control(...) call on this line (role and name, label, test id or text), if any."""
+    call = CONTROL_CALL.search(line)
+    if call is None or re.search(r"\bdef\s+control\(|\bfunction\s+control\(", line):
+        return None
+    args = call.group("args")
+    exact = bool(EXACT.search(args))
+    for kind, regex in CONTROL_ARGS.items():
+        if (m := regex.search(args)) is None:
+            continue
+        ref = Ref(path, number, current, kind, source=call.group(0)[:100].strip(), exact=exact)
+        if kind == "role":
+            ref.role = m.group("s")
+            if ref.role not in CONTROL_ROLES:
+                return None
+            if named := CONTROL_NAME.search(args):
+                ref.value, ref.regex, ref.pattern = value_of(named)
+        elif kind == "testid":
+            ref.value = m.group("s")
+        else:
+            ref.value, ref.regex, ref.pattern = value_of(m)
+        return ref
+    return None
 
 
 # ---------------------------------------------------------------- matching

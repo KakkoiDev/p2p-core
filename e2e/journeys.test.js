@@ -8,7 +8,7 @@ import { matchmake } from '../extras/matchmaking.js';
 import { presence } from '../extras/presence.js';
 import { sharedState } from '../extras/state.js';
 import { describeStatus } from '../extras/status-ui.js';
-import { nextEvent, record } from './events.mjs';
+import { nextEvent, record, untilEvents } from './events.mjs';
 
 /** Named players in one room of one test network; `leave()` ends them all. */
 function players(names, options = {}) {
@@ -244,13 +244,10 @@ test('A third player is told the room is full and never hears the game', async (
   try {
     const matchedSet = new Set();
     const fullSet = new Set();
-    const settled = new Promise((resolve, reject) => {
-      const deadline = setTimeout(() => reject(new Error(`timed out: ${matchedSet.size} matched, ${fullSet.size} told full`)), 8000);
-      const check = () => {
-        if (matchedSet.size === 2 && [...fullSet].some((m) => !matchedSet.has(m))) { clearTimeout(deadline); resolve(); }
-      };
-      matches.forEach((m) => { m.onMatch(() => { matchedSet.add(m); check(); }); m.onRoomFull(() => { fullSet.add(m); check(); }); });
-    });
+    matches.forEach((m) => { m.onMatch(() => matchedSet.add(m)); m.onRoomFull(() => fullSet.add(m)); });
+    const settled = untilEvents(matches.flatMap((m) => [m.onMatch, m.onRoomFull]),
+      () => matchedSet.size === 2 && [...fullSet].some((m) => !matchedSet.has(m)),
+      () => `two matched and one told full (${matchedSet.size} matched, ${fullSet.size} told full)`);
     // When two of them are matched
     await settled;
     const pair = [...matchedSet];

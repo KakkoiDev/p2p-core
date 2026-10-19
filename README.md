@@ -366,7 +366,7 @@ one end-to-end test named exactly after its title: a journey of real rooms on th
 `e2e/journeys.test.js`, or a real browser in `e2e/browser.spec.mjs`. Every control on the example pages and in the
 pairing dialog has a step that uses it, by role or label; a test that uses a control which no longer exists fails, so
 removing a control means removing its scenario and test knowingly. Tests wait for state, never for time, and never
-reach the internet. The checkers are vendored in `tools/test-core/` (see its README for the source commit).
+reach the internet. The checkers are pinned in `test-core/` (adopted with test-core's `adopt/adopt.py`; the commit is in `test-core/MANIFEST.json`) (see its README for the source commit).
 
 `npm run test:browser` needs Chromium; set `CHROMIUM=/path/to/chrome` if it is not at
 `/opt/pw-browsers/chromium`. In CI it is installed by the workflow.

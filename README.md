@@ -353,10 +353,20 @@ page with a different list still uses the first.
 ## Developing p2p-core
 
 ```sh
-npm test                  # node --test: unit and transport tests
-npm run test:browser      # Chromium: tabs, local server, pairing, trystero over a local nostr relay
+npm test                  # node --test: unit and transport tests (and the in-memory scenario journeys)
+npm run test:e2e          # the scenario journeys alone, with a JUnit report in .test-output/
+npm run test:browser      # Chromium scenarios: tabs, local server, pairing, trystero over a local nostr relay
+npm run test:protocol     # after the two above: every scenario's test passed, every control used, no fixed waits
 npm run serve             # the examples at http://localhost:8787/examples/
 ```
+
+Testing protocol (the same as Pi Workbench's, from [test-core](https://github.com/KakkoiDev/test-core)): every feature
+has Given/When/Then scenarios in a `SCENARIOS.md` next to it (`src/`, `extras/`, `examples/`), and each scenario is
+one end-to-end test named exactly after its title: a journey of real rooms on the in-memory network in
+`e2e/journeys.test.js`, or a real browser in `e2e/browser.spec.mjs`. Every control on the example pages and in the
+pairing dialog has a step that uses it, by role or label; a test that uses a control which no longer exists fails, so
+removing a control means removing its scenario and test knowingly. Tests wait for state, never for time, and never
+reach the internet. The checkers are vendored in `tools/test-core/` (see its README for the source commit).
 
 `npm run test:browser` needs Chromium; set `CHROMIUM=/path/to/chrome` if it is not at
 `/opt/pw-browsers/chromium`. In CI it is installed by the workflow.

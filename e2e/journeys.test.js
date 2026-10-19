@@ -242,17 +242,22 @@ test('A third player is told the room is full and never hears the game', async (
   const room = players(names);
   const matches = names.map((name) => matchmake(room[name], { helloIntervalMs: 20, pendingTimeoutMs: 200 }));
   try {
-    const outcomes = matches.map((m, i) => Promise.race([
-      nextEvent(m.onMatch, () => true, `${names[i]} matched`, 8000).then(() => ['matched', m]),
-      nextEvent(m.onRoomFull, () => true, `${names[i]} told full`, 8000).then(() => ['full', m]),
-    ]));
+    const matchedSet = new Set();
+    const fullSet = new Set();
+    const settled = new Promise((resolve, reject) => {
+      const deadline = setTimeout(() => reject(new Error(`timed out: ${matchedSet.size} matched, ${fullSet.size} told full`)), 8000);
+      const check = () => {
+        if (matchedSet.size === 2 && [...fullSet].some((m) => !matchedSet.has(m))) { clearTimeout(deadline); resolve(); }
+      };
+      matches.forEach((m) => { m.onMatch(() => { matchedSet.add(m); check(); }); m.onRoomFull(() => { fullSet.add(m); check(); }); });
+    });
     // When two of them are matched
-    const settled = await Promise.all(outcomes);
-    const pair = settled.filter(([what]) => what === 'matched').map(([, m]) => m);
+    await settled;
+    const pair = [...matchedSet];
     assert.equal(pair.length, 2);
     // Then the third is told the room is full
-    const outsider = settled.find(([what]) => what === 'full')?.[1];
-    assert.ok(outsider, 'one player was told the room is full');
+    const outsider = matches.find((m) => !matchedSet.has(m));
+    assert.ok(fullSet.has(outsider), 'the third player was told the room is full');
     // And a move between the matched two never reaches the third
     const outsiderHeard = record((fn) => outsider.on('move', fn));
     const arrived = nextEvent((fn) => pair[1].on('move', fn), () => true, 'the move');

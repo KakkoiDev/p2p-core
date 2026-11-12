@@ -15,6 +15,37 @@ See the [deployment example](https://github.com/KakkoiDev/p2p-core-cloudflare)
 for a Wrangler configuration and setup commands. Run the library's tests with
 `node --test cloudflare/protocol.test.mjs` from the repository root.
 
+## Troubleshoot the first deploy
+
+- **Entry point missing:** If your deployment config points to a sibling
+  checkout, verify that the path exists relative to `wrangler.toml`. Update
+  that checkout to a revision containing `cloudflare/worker.mjs`.
+- **Subdomain created, then `fetch failed`:** Check authentication with
+  `npx wrangler@4 whoami`. A successful result confirms account access.
+  Check the deploy log for the last API request and whether the Worker was
+  uploaded. The existing login and registered subdomain can be reused on a
+  retry.
+- **API connection failures:** In the same shell, check for proxy variable
+  names with `env | cut -d= -f1 | grep -Ei '^(https?|all|no)_proxy$'`. If direct
+  access is available, try a single deploy with these variables unset:
+
+  ```sh
+  env -u HTTPS_PROXY -u HTTP_PROXY -u ALL_PROXY -u NO_PROXY \
+      -u https_proxy -u http_proxy -u all_proxy -u no_proxy \
+      npx wrangler@4 deploy
+  ```
+
+  One deployment succeeded with this command after two failed attempts,
+  even though the shell listed no proxy variables. The exact cause was
+  unconfirmed. On networks that require a proxy, use the
+  [Wrangler proxy configuration](https://developers.cloudflare.com/workers/wrangler/configuration/#proxy-support).
+
+After Wrangler prints the deployed URL and version ID, request
+`https://<worker>.<subdomain>.workers.dev/__p2p-core/ws` over HTTPS. HTTP
+426 confirms the Worker route is reachable and expects a WebSocket upgrade.
+To verify forwarding, connect two clients from an allowed origin and send
+a test message in each direction.
+
 ## Connect an app
 
 Use the current p2p-core client. Give each project a distinct `app` name and configure the same URL on every participant.

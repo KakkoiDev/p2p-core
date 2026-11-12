@@ -35,8 +35,8 @@ export interface JoinOptions {
   mode?: Mode;
   /** Who may join. All true by default. */
   allow?: Allow;
-  /** Local server: 'auto' (the server this page came from), a URL, or false. */
-  server?: string | false;
+  /** WebSocket relay: 'auto', a URL, or an options object for URL-routed relays. */
+  server?: string | false | { url: string; roomInUrl?: boolean };
   /** Nostr relays. Default RELAYS. Only players with an overlapping list meet. */
   relays?: readonly string[];
   /** TURN servers for networks that block direct links. */

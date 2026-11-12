@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Recover Nostr discovery after a failed first connection or socket reconnect.
+- Exclude offchain.pub from default signaling after it rejected announcements
+  from keys outside its web of trust. Record nos.lol's proof-of-work refusal.
+- Distinguish open signaling sockets from established peer connections in
+  diagnostics, and keep invite passwords out of handshake errors.
+
 ## 0.1.0 — 2026-10-03
 
 First release.

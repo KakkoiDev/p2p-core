@@ -34,3 +34,48 @@ test('package.json and VERSION agree', async () => {
   const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url)));
   assert.equal(VERSION, pkg.version);
 });
+
+test('a relay can open after a failed handshake and restores active subscriptions on reconnect', async (t) => {
+  const { makeSocket } = await import('../vendor/trystero/src/utils.js');
+  const sockets = [], retries = [];
+  t.mock.method(globalThis, 'setTimeout', callback => { retries.push(callback); });
+  class FakeSocket {
+    constructor(url) { this.url = url; this.readyState = 0; this.sent = []; sockets.push(this); }
+    send(message) { this.sent.push(message); }
+    open() { this.readyState = 1; this.onopen(); }
+    close() { this.readyState = 3; this.onclose(); }
+  }
+  const originalSocket = Object.getOwnPropertyDescriptor(globalThis, 'WebSocket');
+  Object.defineProperty(globalThis, 'WebSocket', { configurable: true, writable: true, value: FakeSocket });
+  t.after(() => {
+    if (originalSocket) Object.defineProperty(globalThis, 'WebSocket', originalSocket);
+    else delete globalThis.WebSocket;
+  });
+  const relay = makeSocket('wss://relay.example', () => {}, true);
+  const ready = relay.ready;
+  sockets[0].close();
+  retries.shift()();
+  sockets[1].open();
+  assert.equal(await ready, relay);
+  const retained = '["REQ","retained",{}]';
+  const removed = '["REQ","removed",{}]';
+  relay.send(retained);
+  relay.send(removed);
+  sockets[1].close();
+  relay.send('["CLOSE","removed"]');
+  relay.send('["EVENT",{}]');
+  retries.shift()();
+  sockets[2].open();
+  assert.deepEqual(sockets[2].sent, [retained]);
+});
+
+test('relay diagnostics distinguish open sockets from a completed peer connection', async () => {
+  const { describeStatus, diagnose } = await import('../extras/status-ui.js');
+  const status = { peers: 0, transports: { relays: { open: 0, total: 8, state: 'connecting' } } };
+  assert.match(diagnose(status, 12000), /No signaling relay socket is open/);
+  status.transports.relays.open = 1;
+  assert.match(describeStatus(status), /1 of 8 relay sockets open/);
+  assert.match(diagnose(status, 91000), /relay policy or WebRTC/);
+  status.peers = 1;
+  assert.equal(diagnose(status, 91000), null);
+});

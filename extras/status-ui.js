@@ -15,8 +15,8 @@ export function describeStatus(status) {
   const parts = [];
   const players = status.peers === 1 ? '1 other player' : `${status.peers} other players`;
   if (t.relays) {
-    if (t.relays.state === 'unavailable') parts.push('internet: off (needs https)');
-    else parts.push(`internet: ${t.relays.open} of ${t.relays.total} relays answering`);
+    if (t.relays.state === 'unavailable') parts.push(`internet: off (${t.relays.detail || 'unavailable'})`);
+    else parts.push(`internet: ${t.relays.open} of ${t.relays.total} relay sockets open`);
   }
   if (t.server && t.server.state !== 'off') {
     parts.push(t.server.state === 'ready' ? 'local server: connected' : `local server: ${t.server.detail || t.server.state}`);
@@ -32,13 +32,13 @@ export function diagnose(status, waitedMs = 0) {
   const t = status.transports;
   if (status.peers > 0) return null;
   if (t.relays && t.relays.state !== 'unavailable' && t.relays.open === 0 && waitedMs > 6000) {
-    return 'No relay is answering. This network may block them — try another network, or play offline with a local server or pairing.';
+    return 'No signaling relay socket is open. The network may block these relays, or the relays may be unavailable.';
   }
   if (t.relays?.state === 'unavailable' && !t.server?.state?.startsWith('ready')) {
-    return 'This page is not https, so the internet relays are off. Open it over https, or use the local server or pairing.';
+    return `Internet signaling is unavailable (${t.relays.detail || 'check WebRTC and HTTPS support'}).`;
   }
-  if (waitedMs > 90000) {
-    return 'Nobody has turned up yet. Check that everyone opened the same link, and that neither network blocks direct connections (see TURN in the README).';
+  if (t.relays?.open > 0 && waitedMs > 90000) {
+    return 'A signaling socket is open. Check the invite and host first. If both are correct, relay policy or WebRTC network restrictions may be blocking the connection.';
   }
   return null;
 }

@@ -322,6 +322,15 @@ your service worker's list and bump its cache version.
 
 ---
 
+### Reading connection status
+
+An open relay socket confirms that the browser reached a signaling endpoint.
+It does not confirm that the relay accepts the app's announcements, that both
+peers share a relay, or that a WebRTC connection opened. Use `room.status()`
+to distinguish these cases and check the invite and host before changing the
+network setup. The vendored Nostr socket retries failed connections and
+restores active subscriptions when it reconnects.
+
 ## The relay list
 
 `RELAYS` is shared by every p2p-core app, and only ever grows. Two players meet only on a relay

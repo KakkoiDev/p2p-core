@@ -4,19 +4,16 @@ One WebSocket endpoint for multiple [p2p-core](https://github.com/KakkoiDev/p2p-
 
 ## Deploy
 
-1. Create a Cloudflare account and enable Workers Free. Register a `workers.dev` subdomain if prompted.
-2. Clone p2p-core and open the `cloudflare/` directory. In `wrangler.toml`, set `ALLOWED_ORIGINS` to the exact HTTPS origins of your apps, separated by commas. An origin has no trailing slash or path.
-3. With Node.js 22 or newer, run the tests and deploy.
+The Worker and protocol in this directory are reusable. Use a Wrangler
+configuration in your deployment repository to supply the Worker name,
+allowed browser origins, and Durable Object binding. The Worker expects a
+`ROOMS` binding to the exported `RelayRoom` class. Use a SQLite-backed
+Durable Object to deploy on Workers Free within
+[Cloudflare's limits](https://developers.cloudflare.com/durable-objects/platform/pricing/).
 
-   ```sh
-   node --test
-   npx wrangler@4 login
-   npx wrangler@4 deploy
-   ```
-
-4. Copy the deployed URL and change `https://` to `wss://`. Configure each app to use that endpoint. Add new app origins to the same configuration and redeploy the relay.
-
-Workers Free supports SQLite-backed Durable Objects within [its free-tier limits](https://developers.cloudflare.com/durable-objects/platform/pricing/). The SQLite binding is required for the free plan. This relay does not write board data to SQLite.
+See the [deployment example](https://github.com/KakkoiDev/p2p-core-cloudflare)
+for a Wrangler configuration and setup commands. Run the library's tests with
+`node --test cloudflare/protocol.test.mjs` from the repository root.
 
 ## Connect an app
 
@@ -34,7 +31,9 @@ const room = joinRoom({
 
 The client uses `/__p2p-core/ws` and includes its p2p-core room key in the upgrade URL so Cloudflare can route the socket. It then uses the regular p2p-core join and message frames. When WebRTC and the WebSocket relay are both available, p2p-core prefers the WebRTC route over the server.
 
-For Mini Flow, set `liveRelayUrl` near the top of `mini-flow-live.js` in your deployment to the same WSS origin. Start a fresh session after deploying, then open the invite on another browser. Under **Live session**, check that **WebSocket relay** is ready and verify that edits travel in both directions. Use two browsers or machines to exercise the relay path. On Safari with WebRTC unavailable, no direct connection is expected.
+Start a new room after deploying your app. Verify an edit in each direction
+using two browsers or machines. To exercise the fallback, include a browser
+where WebRTC is unavailable.
 
 ## Trust and limits
 

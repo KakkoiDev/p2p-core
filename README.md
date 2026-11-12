@@ -196,8 +196,8 @@ const room = joinRoom({
 
 Enable the same relay on every participant. p2p-core prefers WebRTC when
 both routes reach the same peer. The relay can read forwarded messages, so
-use a relay operator you trust. See the [Cloudflare setup guide](./cloudflare/)
-for deployment, limits, and verification.
+use a relay operator you trust. See the [relay documentation](./cloudflare/) and the
+[deployment example](https://github.com/KakkoiDev/p2p-core-cloudflare).
 
 ---
 

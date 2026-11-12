@@ -138,6 +138,12 @@ export interface RoomDebugReport {
     secureContext?: boolean;
     webSocket: boolean;
     webRTC: boolean;
+    webRTCProbe: {
+      peerConnectionType: string;
+      webkitPeerConnectionType: string;
+      localDataChannel: 'api-unavailable' | 'constructor-failed' | 'data-channel-failed' | 'passed';
+      errorName?: string;
+    };
   };
   omittedEvents: number;
   events: Array<{ ms: number; event: string; [key: string]: unknown }>;

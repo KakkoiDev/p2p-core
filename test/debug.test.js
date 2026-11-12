@@ -1,6 +1,49 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createTestNetwork, joinRoom } from '../p2p-core.js';
+import { createDebugReport } from '../src/debug.js';
+
+test('WebRTC capability probe reports a missing standard API', () => {
+  const scope = { webkitRTCPeerConnection: class {} };
+  const { webRTC, webRTCProbe } = createDebugReport({}, scope).report().browser;
+  assert.equal(webRTC, false);
+  assert.deepEqual(webRTCProbe, {
+    peerConnectionType: 'undefined', webkitPeerConnectionType: 'function',
+    localDataChannel: 'api-unavailable',
+  });
+});
+
+test('WebRTC capability probe captures constructor failures without exposing error details', () => {
+  class RTCPeerConnection {
+    constructor() { throw new DOMException('private browser details', 'SecurityError'); }
+  }
+  const { webRTC, webRTCProbe } = createDebugReport({}, { RTCPeerConnection }).report().browser;
+  assert.equal(webRTC, true);
+  assert.equal(webRTCProbe.localDataChannel, 'constructor-failed');
+  assert.equal(webRTCProbe.errorName, 'SecurityError');
+  assert.doesNotMatch(JSON.stringify(webRTCProbe), /private browser details/);
+});
+
+test('WebRTC capability probe runs once and closes the connection on success and failure', () => {
+  let closed = 0;
+  let fail = false;
+  class RTCPeerConnection {
+    constructor(options) { assert.deepEqual(options, { iceServers: [] }); }
+    createDataChannel() {
+      if (fail) throw new DOMException('channel failure', 'OperationError');
+    }
+    close() { closed++; }
+  }
+  const diagnostics = createDebugReport({}, { RTCPeerConnection });
+  assert.equal(diagnostics.report().browser.webRTCProbe.localDataChannel, 'passed');
+  assert.equal(diagnostics.report().browser.webRTCProbe.localDataChannel, 'passed');
+  assert.equal(closed, 1);
+  fail = true;
+  const { webRTCProbe } = createDebugReport({}, { RTCPeerConnection }).report().browser;
+  assert.equal(webRTCProbe.localDataChannel, 'data-channel-failed');
+  assert.equal(webRTCProbe.errorName, 'OperationError');
+  assert.equal(closed, 2);
+});
 
 test('connection diagnostics are opt-in and report peer admission without exposing room secrets', async () => {
   const network = createTestNetwork();

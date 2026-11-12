@@ -350,6 +350,16 @@ Compare the room fingerprints and relay hostnames across devices. Relay
 socket states use the WebSocket values 0 (connecting), 1 (open), 2 (closing),
 and 3 (closed).
 
+The `browser.webRTCProbe` field records the types of the standard and
+WebKit-prefixed peer connection APIs. When the standard API is present,
+the probe opens and closes a local peer connection to check whether it can
+create a data channel. It uses no ICE servers and sends no signaling.
+
+To compare Safari across sites, run `typeof globalThis.RTCPeerConnection`
+in the page's console on the app and on another HTTPS site. Repeat in a
+private window to compare with the regular window. The report can only test
+its own page and cannot read Safari's feature flags or browser policies.
+
 The report keeps the most recent 600 events in memory and counts older
 events it omits. It includes browser version and relay hostnames. Invite
 credentials, raw peer IDs, message contents, SDP, ICE addresses and TURN

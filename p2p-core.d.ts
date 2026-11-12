@@ -68,6 +68,7 @@ export interface JoinOptions {
   /** Advanced: fixed id (tests). Not allowed with the real relays. */
   selfId?: string;
   /** Log what happens to the console. */
+  /** Collect an in-memory, shareable connection timeline. Defaults to false. */
   debug?: boolean;
 }
 
@@ -122,6 +123,28 @@ export interface Invite {
 
 type Off = () => void;
 
+export interface RoomDebugReport {
+  schemaVersion: 1;
+  app: string;
+  mode: Mode;
+  version: string;
+  protocol?: number;
+  roomFingerprint: string;
+  startedAt: string;
+  elapsedMs: number;
+  browser: {
+    userAgent?: string;
+    online?: boolean;
+    secureContext?: boolean;
+    webSocket: boolean;
+    webRTC: boolean;
+  };
+  omittedEvents: number;
+  events: Array<{ ms: number; event: string; [key: string]: unknown }>;
+  left: boolean;
+  stats: Room['stats'];
+}
+
 export interface Room {
   readonly selfId: string;
   readonly app: string;
@@ -166,6 +189,7 @@ export interface Room {
   setProfile(profile: unknown): void;
 
   status(): RoomStatus;
+  debugReport(): RoomDebugReport | null;
   route(id: string): Promise<Route | null>;
   ping(id: string, timeoutMs?: number): Promise<number>;
 

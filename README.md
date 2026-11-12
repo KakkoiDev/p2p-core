@@ -213,7 +213,7 @@ written by a computer you do not control: check every field before it becomes ga
 | `profile` | – | anything JSON: sent to every peer, read as `peer.profile` |
 | `kinds` | `[]` | message kinds to register at once |
 | `network` | – | a `createTestNetwork()`: run in memory |
-| `debug` | `false` | log to the console |
+| `debug` | `false` | collect a connection timeline available through `room.debugReport()` |
 | security | – | see above |
 
 `appId` and `roomId` are accepted too, for trystero habits.
@@ -330,6 +330,31 @@ peers share a relay, or that a WebRTC connection opened. Use `room.status()`
 to distinguish these cases and check the invite and host before changing the
 network setup. The vendored Nostr socket retries failed connections and
 restores active subscriptions when it reconnects.
+
+### Connection diagnostics
+
+Set `debug: true` when joining, on both devices if possible. Copy a snapshot
+from the browser console while the connection is stalled, after it succeeds,
+or after calling `room.leave()`.
+
+```js
+const room = joinRoom({ app: 'my-game', room: 'demo', debug: true });
+console.log(room.debugReport());
+```
+
+The report includes browser capabilities, transport status, relay socket
+transitions and reconnects, Nostr subscription and publication replies,
+offer/answer milestones, ICE and data-channel states, candidate type counts,
+selected-pair statistics when available, and room-level peer admission.
+Compare the room fingerprints and relay hostnames across devices. Relay
+socket states use the WebSocket values 0 (connecting), 1 (open), 2 (closing),
+and 3 (closed).
+
+The report keeps the most recent 600 events in memory and counts older
+events it omits. It includes browser version and relay hostnames. Invite
+credentials, raw peer IDs, message contents, SDP, ICE addresses and TURN
+credentials are excluded. With diagnostics disabled, `debugReport()`
+returns `null`.
 
 ## The relay list
 

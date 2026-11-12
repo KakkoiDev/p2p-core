@@ -177,6 +177,30 @@ Anyone can read credentials in a web page; prefer short-lived ones from your pro
 
 ---
 
+## Hosted WebSocket fallback
+
+A p2p-core app can use the [Cloudflare relay in this repo](./cloudflare/) to
+connect browsers that lack WebRTC or cannot establish a peer connection.
+Run one relay for multiple projects by allowing each site's origin and
+giving each project its own `app` name.
+
+```js
+const room = joinRoom({
+  app: 'my-project',
+  room: 'shared-room',
+  password: invitePassword,
+  mode: 'online',
+  server: { url: 'wss://your-relay.workers.dev', roomInUrl: true },
+});
+```
+
+Enable the same relay on every participant. p2p-core prefers WebRTC when
+both routes reach the same peer. The relay can read forwarded messages, so
+use a relay operator you trust. See the [Cloudflare setup guide](./cloudflare/)
+for deployment, limits, and verification.
+
+---
+
 ## Security options
 
 All optional.
@@ -206,7 +230,7 @@ written by a computer you do not control: check every field before it becomes ga
 | `room` | `'lobby'` | room within the app |
 | `mode` | `'auto'` | see Modes |
 | `allow` | all true | see Modes |
-| `server` | `'auto'` in auto/offline | local server URL, or `false` |
+| `server` | `'auto'` in auto/offline | Server URL, `false`, or `{ url, roomInUrl: true }` for [Cloudflare](./cloudflare/) |
 | `relays` | `RELAYS` | nostr relays (shared list; see below) |
 | `turn` | `[]` | TURN servers |
 | `rtcConfig` | – | extra `RTCPeerConnection` config |

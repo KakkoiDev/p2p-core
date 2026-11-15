@@ -245,3 +245,13 @@ test('call: the lower id offers through room messages, and garbage is ignored', 
     highCall.hangUp();
   } finally { done(); }
 });
+
+test('call: quality presets rewrite Opus in the SDP we send', async () => {
+  const { tuneOpus, QUALITY } = await import('../extras/call.js');
+  const sdp = 'm=audio 9 UDP/TLS/RTP/SAVPF 111\r\na=rtpmap:111 opus/48000/2\r\na=fmtp:111 minptime=10;useinbandfec=0\r\n';
+  const max = tuneOpus(sdp, QUALITY.max);
+  assert.match(max, /a=fmtp:111 minptime=10;useinbandfec=1;usedtx=0;maxaveragebitrate=128000;stereo=1;sprop-stereo=1/);
+  assert.equal(tuneOpus(sdp, null), sdp);
+  assert.match(tuneOpus('a=rtpmap:96 opus/48000/2\r\n', QUALITY.high), /a=fmtp:96 useinbandfec=1;usedtx=0;maxaveragebitrate=96000\r\n/);
+  assert.equal(tuneOpus('m=video 9\r\n', QUALITY.max), 'm=video 9\r\n');
+});

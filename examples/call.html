@@ -18,11 +18,16 @@ button{font:inherit;padding:6px 12px;margin:4px 4px 12px 0;border-radius:6px;bor
 import { joinRoom } from '../p2p-core.js';
 import { call } from '../extras/call.js';
 
+// For the browser checks: keep the RTCPeerConnections the call makes.
+window.__pcs = [];
+const NativePC = window.RTCPeerConnection;
+window.RTCPeerConnection = class extends NativePC { constructor(...a) { super(...a); window.__pcs.push(this); } };
+
 const params = new URLSearchParams(location.search);
 const room = joinRoom({ app: 'p2p-core-call-demo', room: location.hash.slice(1) || 'lobby', mode: params.get('mode') || 'auto' });
 const media = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
 document.querySelector('#me').srcObject = media;
-const c = call(room, { stream: media, rtcConfig: { iceServers: [] } });
+const c = call(room, { stream: media, rtcConfig: { iceServers: [] }, quality: params.get('quality') || 'auto' });
 window.room = room;
 window.call = c;
 window.remote = new Map();

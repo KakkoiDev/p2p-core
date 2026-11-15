@@ -47,8 +47,38 @@ export function isOfferer(selfId, peerId) {
   return String(selfId) < String(peerId);
 }
 
+/**
+ * Quality presets. 'auto' leaves everything to the browser (it starts low and
+ * ramps up). 'high' and 'max' raise the ceilings for good links such as a LAN or
+ * Tailscale: more video bitrate and frame rate, keep the resolution when the
+ * link wobbles, and stereo high-bitrate Opus with forward error correction.
+ * Ceilings only: WebRTC's congestion control still backs off on a bad link.
+ */
+export const QUALITY = {
+  auto: null,
+  high: { videoBitrate: 2_500_000, screenBitrate: 4_000_000, fps: 30, audioBitrate: 96_000, stereo: false, degradation: 'balanced' },
+  max: { videoBitrate: 6_000_000, screenBitrate: 8_000_000, fps: 60, audioBitrate: 128_000, stereo: true, degradation: 'maintain-resolution' },
+};
+
+/** Ask the other side to send us better Opus: written into the SDP we send them. */
+export function tuneOpus(sdp, q) {
+  if (!q || typeof sdp !== 'string') return sdp;
+  const pt = sdp.match(/a=rtpmap:(\d+) opus\/48000/i)?.[1];
+  if (!pt) return sdp;
+  const want = { useinbandfec: '1', usedtx: '0', maxaveragebitrate: String(q.audioBitrate), ...(q.stereo ? { stereo: '1', 'sprop-stereo': '1' } : {}) };
+  const line = new RegExp(`a=fmtp:${pt} ([^\r\n]*)`);
+  const merge = (params) => {
+    const map = new Map(params.split(';').map((kv) => kv.trim()).filter(Boolean).map((kv) => kv.split('=')));
+    for (const [k, v] of Object.entries(want)) map.set(k, v);
+    return [...map].map(([k, v]) => `${k}=${v}`).join(';');
+  };
+  if (line.test(sdp)) return sdp.replace(line, (_, params) => `a=fmtp:${pt} ${merge(params)}`);
+  return sdp.replace(new RegExp(`(a=rtpmap:${pt} opus/48000[^\r\n]*\r?\n)`, 'i'), `$1a=fmtp:${pt} ${merge('')}\r\n`);
+}
+
 export function call(room, {
   stream = null,
+  quality = 'auto',
   kind = 'call',
   rtcConfig = DEFAULT_RTC,
   state = { audio: true, video: true },
@@ -59,13 +89,38 @@ export function call(room, {
   const links = new Map();               // peerId -> link
   const handlers = { stream: [], leave: [], state: [], connection: [] };
   const emit = (name, ...args) => { for (const fn of handlers[name]) { try { fn(...args); } catch (err) { console.error(err); } } };
+  const q = typeof quality === 'object' ? quality : QUALITY[quality] ?? null;
   let local = stream;
+  let sharing = false;
   let mine = cleanState(state) || {};
   let ended = false;
   const offs = [];
 
   const trackOf = (kindName) => local?.getTracks().find((t) => t.kind === kindName) || null;
   const send = (data, to) => { if (!ended) room.send(kind, data, to); };
+  const describe = (desc) => {
+    const d = desc.toJSON ? desc.toJSON() : { type: desc.type, sdp: desc.sdp };
+    return q ? { type: d.type, sdp: tuneOpus(d.sdp, q) } : d;
+  };
+  // Raise the sending ceilings once a link is up (encodings exist only after negotiation).
+  async function tune(link) {
+    if (!q) return;
+    for (const [k, t] of Object.entries(slots(link))) {
+      const params = t.sender.getParameters();
+      if (!params.encodings?.length) continue;
+      const enc = params.encodings[0];
+      if (k === 'video') {
+        enc.maxBitrate = sharing ? q.screenBitrate : q.videoBitrate;
+        enc.maxFramerate = q.fps;
+        params.degradationPreference = sharing ? 'maintain-resolution' : q.degradation;
+      } else {
+        enc.maxBitrate = q.audioBitrate;
+        enc.priority = 'high';
+        enc.networkPriority = 'high';
+      }
+      try { await t.sender.setParameters(params); } catch { /* not every browser takes every field */ }
+    }
+  }
 
   function slots(link) {
     // One sender per kind: found through the transceiver's receiver, which always has a kind.
@@ -101,7 +156,7 @@ export function call(room, {
       try {
         link.makingOffer = true;
         await pc.setLocalDescription();
-        send({ d: pc.localDescription.toJSON ? pc.localDescription.toJSON() : pc.localDescription }, id);
+        send({ d: describe(pc.localDescription) }, id);
       } catch (err) {
         console.warn('p2p-core call: could not make an offer', err);
       } finally {
@@ -110,6 +165,7 @@ export function call(room, {
     };
     pc.onconnectionstatechange = () => {
       emit('connection', id, pc.connectionState);
+      if (pc.connectionState === 'connected') tune(link);
       if (pc.connectionState === 'failed' && !link.polite) {
         try { pc.restartIce(); } catch { /* old browser */ }
       }
@@ -152,7 +208,7 @@ export function call(room, {
         if (d.type === 'offer') {
           await attachTracks(link);
           await pc.setLocalDescription();
-          send({ d: pc.localDescription.toJSON ? pc.localDescription.toJSON() : pc.localDescription }, from);
+          send({ d: describe(pc.localDescription) }, from);
         }
       } catch (err) {
         console.warn('p2p-core call: bad description from', from, err);
@@ -171,9 +227,10 @@ export function call(room, {
 
   const api = {
     /** Swap the media everyone receives: another camera, the screen, or null for nothing. */
-    async setStream(next) {
+    async setStream(next, { screen = false } = {}) {
       local = next;
-      await Promise.all([...links.values()].map(attachTracks));
+      sharing = screen;
+      await Promise.all([...links.values()].map(async (l) => { await attachTracks(l); await tune(l); }));
     },
     /** Tell everyone your state: { audio, video, screen, hand } booleans. */
     setState(next) {
@@ -181,6 +238,8 @@ export function call(room, {
       send({ s: mine });
     },
     state: () => ({ ...mine }),
+    /** The sending ceilings in use (null for 'auto'). */
+    quality: () => (q ? { ...q } : null),
     peers: () => [...links.values()].map((l) => ({ id: l.id, stream: l.remote, state: { ...l.state }, connection: l.pc.connectionState })),
     onStream: (fn) => { handlers.stream.push(fn); return () => { handlers.stream = handlers.stream.filter((f) => f !== fn); }; },
     onLeave: (fn) => { handlers.leave.push(fn); return () => { handlers.leave = handlers.leave.filter((f) => f !== fn); }; },

@@ -5,6 +5,8 @@
 - `extras/call.js`: audio/video calls (full mesh) over every transport, negotiated through room
   messages (perfect negotiation, one audio and one video slot per link, track swaps without
   renegotiation, mute/camera/screen state, hang up). `examples/call.html`, Node and Chromium tests.
+- Call quality presets (`quality: 'auto' | 'high' | 'max'`): sender bitrate and frame-rate ceilings,
+  resolution kept under load, stereo high-bitrate Opus with FEC requested through the SDP.
 - README: the server protocol, for apps that host the room themselves (DropBox does).
 - `p2p-core vendor` prints a clean import path when folders sit behind symlinks (macOS temp dirs).
 

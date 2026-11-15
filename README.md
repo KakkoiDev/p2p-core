@@ -316,7 +316,7 @@ Optional modules in `extras/`, each usable on its own:
 | `pairing-ui.js` — `openPairing(room)` | the pairing dialog. Styled by `ui.css`; restyle with `--p2p-*` variables. |
 | `status-ui.js` — `connectionBadge(room)`, `describeStatus`, `diagnose` | one line saying who is here and how, and what is likely wrong when nobody is. |
 | `qr.js` — `qrSvg`, `scanQr`, `readQrFromImage` | draw and read QR codes. |
-| `call.js` — `call(room, { stream })` | audio and video calls (Meet-style mesh) over **any** transport: the WebRTC handshake goes through room messages. Mute/camera state, screen sharing by swapping tracks, hang up. |
+| `call.js` — `call(room, { stream, quality })` | audio and video calls (Meet-style mesh) over **any** transport: the WebRTC handshake goes through room messages, media goes peer to peer. `quality: 'auto' \| 'high' \| 'max'` raises bitrate/frame-rate ceilings and asks for stereo high-bitrate Opus with FEC (for LAN/Tailscale). Mute/camera state, screen sharing by swapping tracks (`setStream(s, { screen: true })`), hang up. |
 
 ```js
 import { matchmake } from './vendor/p2p-core/extras/matchmaking.js';

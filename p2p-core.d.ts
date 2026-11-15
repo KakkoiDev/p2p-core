@@ -235,8 +235,10 @@ export function classifyCandidates(local: object, remote: object): { path: Route
 // extras/call.js
 export interface CallState { audio?: boolean; video?: boolean; screen?: boolean; hand?: boolean }
 export interface CallPeer { id: string; stream: MediaStream | null; state: CallState; connection: RTCPeerConnectionState }
+export type CallQuality = 'auto' | 'high' | 'max' | { videoBitrate: number; screenBitrate: number; fps: number; audioBitrate: number; stereo: boolean; degradation: RTCDegradationPreference };
 export interface Call {
-  setStream(stream: MediaStream | null): Promise<void>;
+  setStream(stream: MediaStream | null, options?: { screen?: boolean }): Promise<void>;
+  quality(): Exclude<CallQuality, string> | null;
   setState(state: CallState): void;
   state(): CallState;
   peers(): CallPeer[];

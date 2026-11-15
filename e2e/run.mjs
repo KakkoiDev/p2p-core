@@ -128,7 +128,7 @@ try {
     const r = `call-${++room}`;
     const ctx1 = await browser.newContext();
     const ctx2 = await browser.newContext();
-    const url = `http://localhost:${server.port}/examples/call.html?mode=offline#${r}`;
+    const url = `http://localhost:${server.port}/examples/call.html?mode=offline&quality=max#${r}`;
     const a = await ctx1.newPage();
     const b = await ctx2.newPage();
     for (const p of [a, b]) p.on('pageerror', (err) => console.log('    page error:', err.message));
@@ -147,6 +147,19 @@ try {
       return v && v.videoWidth > 0 && v.currentTime > 0.2;
     }, null, { timeout: 15000 }).then(() => true, () => false);
     check(await playing(a) && await playing(b), 'remote video actually plays on both sides');
+    const tuned = await a.evaluate(async () => {
+      for (let i = 0; i < 30; i++) {
+        const pc = [...(window.__pcs || [])][0];
+        await new Promise((r) => setTimeout(r, 100));
+        if (pc) break;
+      }
+      return window.call.quality();
+    });
+    check(tuned?.videoBitrate === 6_000_000 && tuned?.stereo === true, 'the max preset is in use', JSON.stringify(tuned));
+    const senderParams = await a.evaluate(() => (window.__pcs || []).flatMap((pc) => pc.getSenders().map((s) => ({ kind: s.track?.kind, max: s.getParameters().encodings?.[0]?.maxBitrate }))));
+    check(senderParams.some((p) => p.kind === 'video' && p.max === 6_000_000) && senderParams.some((p) => p.kind === 'audio' && p.max === 128_000), 'video and audio senders run with the raised ceilings', JSON.stringify(senderParams));
+    const stereo = await b.evaluate(() => (window.__pcs || []).some((pc) => /stereo=1/.test(pc.currentRemoteDescription?.sdp || '')));
+    check(stereo, 'the other side is asked for stereo high-bitrate Opus');
     await a.evaluate(() => window.call.setState({ audio: false }));
     check(await b.waitForFunction(() => window.call.peers()[0]?.state.audio === false, null, { timeout: 5000 }).then(() => true, () => false), 'muting is announced to the other side');
     const swapped = await a.evaluate(async () => {

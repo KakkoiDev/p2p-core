@@ -177,6 +177,22 @@ Anyone can read credentials in a web page; prefer short-lived ones from your pro
 
 ---
 
+## Your own server
+
+Any server can stand in for `p2p-core serve` by speaking its small protocol on a WebSocket
+(`/__p2p-core/ws`, or any URL passed as `server`). JSON text frames; binary data travels as base64
+inside `d`:
+
+| client → server | server → client |
+|---|---|
+| `{ t: 'join', room, id }` (first frame) | `{ t: 'peers', ids }` (who is already there) |
+| `{ t: 'm', to: null \| [ids], k, d }` | `{ t: 'join', id }`, `{ t: 'leave', id }` |
+| `{ t: 'bye' }` | `{ t: 'm', from, k, d }`, `{ t: 'error', message }` |
+
+`room` is `app:room` (or `app:<hash>` with a password), so a server can map it to its own access
+rules: check the visitor's session in the WebSocket handshake, then accept or refuse the `join`.
+DropBox does this for its calls.
+
 ## Hosted WebSocket fallback
 
 A p2p-core app can use the [Cloudflare relay in this repo](./cloudflare/) to
@@ -300,6 +316,7 @@ Optional modules in `extras/`, each usable on its own:
 | `pairing-ui.js` — `openPairing(room)` | the pairing dialog. Styled by `ui.css`; restyle with `--p2p-*` variables. |
 | `status-ui.js` — `connectionBadge(room)`, `describeStatus`, `diagnose` | one line saying who is here and how, and what is likely wrong when nobody is. |
 | `qr.js` — `qrSvg`, `scanQr`, `readQrFromImage` | draw and read QR codes. |
+| `call.js` — `call(room, { stream })` | audio and video calls (Meet-style mesh) over **any** transport: the WebRTC handshake goes through room messages. Mute/camera state, screen sharing by swapping tracks, hang up. |
 
 ```js
 import { matchmake } from './vendor/p2p-core/extras/matchmaking.js';
@@ -309,8 +326,8 @@ match.on('move', apply);
 match.send('move', move);
 ```
 
-`examples/index.html` (a playground with dots, chat and pairing) and `examples/match.html` (rock
-paper scissors) use all of it. `npm run serve`, then open `/examples/`.
+`examples/index.html` (a playground with dots, chat and pairing), `examples/match.html` (rock
+paper scissors) and `examples/call.html` (a video call) use all of it. `npm run serve`, then open `/examples/`.
 
 ---
 
@@ -408,7 +425,12 @@ page with a different list still uses the first.
 
 - The relays need **https or localhost** (nostr signs with `crypto.subtle`). On a plain-http page
   they switch off and say so in `room.status()`.
-- **Media streams** go over the relays' WebRTC links only, not tabs, the local server or pairing.
+- **`room.addStream`** sends media over the relays' WebRTC links only. For calls on any transport
+  (local server, tabs, pairing, relays) use `extras/call.js`, which negotiates its own WebRTC links
+  through room messages. A call is a full mesh: fine for a handful of people.
+- Over a local or self-hosted server, peers find each other without the internet, but WebRTC media
+  still needs a network path between the devices (same LAN, a VPN like Tailscale, or TURN). Pass
+  `rtcConfig: { iceServers: [] }` to `call()` to avoid contacting public STUN servers.
 - **`maxPeers` is decided by each side.** With many people arriving at once, two players can
   briefly disagree on who got in. For exactly-two games use `matchmake`.
 - WebRTC full mesh is fine for a handful of players and gets heavy beyond about ten, because every

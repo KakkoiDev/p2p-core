@@ -21,7 +21,7 @@ import { serverTransport } from './transports/server.js';
 import { pairTransport } from './transports/pair.js';
 import { memoryTransport } from './transports/memory.js';
 
-export const VERSION = '0.1.0';
+export const VERSION = '0.2.0';
 
 /** Best first: when a peer is reachable several ways, messages take the first. */
 const PRIORITY = ['tabs', 'memory', 'pair', 'relays', 'server'];

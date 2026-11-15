@@ -231,3 +231,18 @@ export function createTestNetwork(options?: { latency?: number }): TestNetwork;
 export function detectServer(base?: string): Promise<string | null>;
 export function planTransports(options: object): Record<string, unknown>;
 export function classifyCandidates(local: object, remote: object): { path: Route['path']; local: boolean | null };
+
+// extras/call.js
+export interface CallState { audio?: boolean; video?: boolean; screen?: boolean; hand?: boolean }
+export interface CallPeer { id: string; stream: MediaStream | null; state: CallState; connection: RTCPeerConnectionState }
+export interface Call {
+  setStream(stream: MediaStream | null): Promise<void>;
+  setState(state: CallState): void;
+  state(): CallState;
+  peers(): CallPeer[];
+  onStream(fn: (id: string, stream: MediaStream) => void): () => void;
+  onLeave(fn: (id: string) => void): () => void;
+  onState(fn: (id: string, state: CallState) => void): () => void;
+  onConnection(fn: (id: string, state: RTCPeerConnectionState) => void): () => void;
+  hangUp(): void;
+}

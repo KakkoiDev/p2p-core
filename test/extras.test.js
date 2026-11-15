@@ -174,8 +174,8 @@ test('status text names every transport and suggests what to do', () => {
       server: { state: 'off' },
     },
   };
-  assert.equal(describeStatus(status), '0 other players · internet: 0 of 10 relays answering · other tabs: on');
-  assert.match(diagnose(status, 10000), /No relay is answering/);
+  assert.equal(describeStatus(status), '0 other players · internet: 0 of 10 relay sockets open · other tabs: on');
+  assert.match(diagnose(status, 10000), /No signaling relay socket is open/);
   assert.equal(diagnose({ ...status, peers: 1 }, 10000), null);
 });
 
@@ -199,4 +199,49 @@ test('cli: vendor copies the browser files, and files lists them', async () => {
     const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url)));
     assert.equal((await exec(process.execPath, [bin, 'version'])).stdout.trim(), pkg.version);
   } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+// ---------------------------------------------------------------- call.js
+import { call, cleanState, isOfferer } from '../extras/call.js';
+
+test('call: media states keep only known booleans', () => {
+  assert.deepEqual(cleanState({ audio: false, video: true, screen: 'yes', evil: '<x>' }), { audio: false, video: true });
+  assert.equal(cleanState('nope'), null);
+  assert.equal(isOfferer('a', 'b'), true);
+  assert.equal(isOfferer('b', 'a'), false);
+});
+
+test('call: the lower id offers through room messages, and garbage is ignored', async () => {
+  const made = [];
+  class FakePC {
+    constructor() { this.signalingState = 'stable'; this.connectionState = 'new'; this.tx = []; made.push(this); this.remote = null; }
+    addTransceiver(kind) { const t = { direction: 'sendrecv', receiver: { track: { kind } }, sender: { replaceTrack: async () => {} } }; this.tx.push(t); queueMicrotask(() => this.onnegotiationneeded?.()); return t; }
+    getTransceivers() { return this.tx; }
+    async setLocalDescription() { this.localDescription = { type: this.remote?.type === 'offer' ? 'answer' : 'offer', sdp: 'v=0 fake' }; this.signalingState = this.localDescription.type === 'offer' ? 'have-local-offer' : 'stable'; }
+    async setRemoteDescription(d) { this.remote = d; this.signalingState = d.type === 'offer' ? 'have-remote-offer' : 'stable'; }
+    async addIceCandidate() {}
+    close() { this.closed = true; }
+  }
+  const { network, rooms: [a, b], done } = testRooms(2);
+  try {
+    const [low, high] = a.selfId < b.selfId ? [a, b] : [b, a];
+    const lowCall = call(low, { RTCPeerConnectionImpl: FakePC, MediaStreamImpl: null });
+    const highCall = call(high, { RTCPeerConnectionImpl: FakePC, MediaStreamImpl: null });
+    await network.settle();
+    await until(() => made.some((pc) => pc.remote?.type === 'answer'), 2000, 'an answer');
+    const offerer = made.find((pc) => pc.remote?.type === 'answer');
+    assert.equal(offerer.tx.length, 2, 'the offerer makes one audio and one video slot');
+    // A malformed signal is dropped without throwing.
+    low.send('call', { d: { type: 'offer', sdp: 42 } }, high.selfId);
+    low.send('call', { s: { audio: 'loud' } }, high.selfId);
+    await network.settle();
+    highCall.setState({ audio: false });
+    await network.settle();
+    await until(() => lowCall.peers()[0]?.state.audio === false, 1000, 'the mute state');
+    lowCall.hangUp();
+    await network.settle();
+    await until(() => highCall.peers().length === 0, 1000, 'hang-up');
+    assert.ok(made.some((pc) => pc.closed));
+    highCall.hangUp();
+  } finally { done(); }
 });

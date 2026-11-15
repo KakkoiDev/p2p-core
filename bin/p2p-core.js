@@ -95,7 +95,8 @@ if (command === 'serve') {
     await fs.mkdir(path.dirname(target), { recursive: true });
     await fs.copyFile(path.join(ROOT, file), target);
   }
-  const rel = path.relative(process.cwd(), dest).split(path.sep).join('/');
+  // Compare real paths: on macOS the temp folder and others sit behind symlinks (/var -> /private/var).
+  const rel = path.relative(await fs.realpath(process.cwd()), await fs.realpath(dest)).split(path.sep).join('/');
   console.log(`p2p-core ${pkg.version} copied to ${rel}/`);
   console.log(`\n  import { joinRoom } from './${rel}/p2p-core.js';\n`);
   console.log(`Service worker? List the files with: npx p2p-core files ./${rel}/`);

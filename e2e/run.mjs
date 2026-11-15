@@ -30,7 +30,7 @@ const browser = await chromium.launch({
   executablePath,
   // Headless Chromium cannot resolve the mDNS names that hide local IPs, so
   // show it the real ones. Real browsers on a real Wi-Fi resolve them.
-  args: ['--disable-features=WebRtcHideLocalIpsWithMdns'],
+  args: ['--disable-features=WebRtcHideLocalIpsWithMdns', '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'],
 });
 
 let room = 0;
@@ -118,6 +118,49 @@ try {
     check(await waitCount(c, 2) && await waitCount(b, 2), 'a second tab joins, reaching one browser by tab and one by server');
     const viaC = Object.fromEntries((await peers(c)).map((p) => [p.name, p.transport]));
     check(viaC.ann === 'tabs' && viaC.ben === 'server', 'each by the best way', JSON.stringify(viaC));
+    await ctx1.close();
+    await ctx2.close();
+  }
+
+  // ------------------------------------------------------------- calls
+  section('A call between two browsers, negotiated through the local server');
+  {
+    const r = `call-${++room}`;
+    const ctx1 = await browser.newContext();
+    const ctx2 = await browser.newContext();
+    const url = `http://localhost:${server.port}/examples/call.html?mode=offline#${r}`;
+    const a = await ctx1.newPage();
+    const b = await ctx2.newPage();
+    for (const p of [a, b]) p.on('pageerror', (err) => console.log('    page error:', err.message));
+    await a.goto(url);
+    await b.goto(url);
+    await a.waitForFunction(() => window.call && window.room);
+    await b.waitForFunction(() => window.call && window.room);
+    check((await peers(a).catch(() => []))[0]?.transport === 'server' || await a.evaluate(() => window.room.peers()[0]?.transport === 'server'), 'the room runs over the server transport');
+    const gotStreams = await Promise.all([a, b].map((p) => p.waitForFunction(() => {
+      const s = [...window.remote.values()][0];
+      return s && s.getAudioTracks().length === 1 && s.getVideoTracks().length === 1;
+    }, null, { timeout: 15000 }).then(() => true, () => false)));
+    check(gotStreams.every(Boolean), 'each side receives one audio and one video track');
+    const playing = (p) => p.waitForFunction(() => {
+      const v = document.querySelector('figure[id^="peer-"] video');
+      return v && v.videoWidth > 0 && v.currentTime > 0.2;
+    }, null, { timeout: 15000 }).then(() => true, () => false);
+    check(await playing(a) && await playing(b), 'remote video actually plays on both sides');
+    await a.evaluate(() => window.call.setState({ audio: false }));
+    check(await b.waitForFunction(() => window.call.peers()[0]?.state.audio === false, null, { timeout: 5000 }).then(() => true, () => false), 'muting is announced to the other side');
+    const swapped = await a.evaluate(async () => {
+      const canvas = Object.assign(document.createElement('canvas'), { width: 320, height: 180 });
+      const g = canvas.getContext('2d');
+      setInterval(() => { g.fillStyle = `hsl(${Date.now() / 10 % 360} 80% 50%)`; g.fillRect(0, 0, 320, 180); }, 50);
+      const track = canvas.captureStream(15).getVideoTracks()[0];
+      const before = window.call.peers()[0];
+      await window.call.setStream(new MediaStream([track]));
+      return !!before;
+    });
+    check(swapped && await playing(b), 'swapping the video (like sharing a screen) keeps the call without renegotiating');
+    await a.evaluate(() => window.call.hangUp());
+    check(await b.waitForFunction(() => window.remote.size === 0, null, { timeout: 5000 }).then(() => true, () => false), 'hanging up removes the caller on the other side');
     await ctx1.close();
     await ctx2.close();
   }

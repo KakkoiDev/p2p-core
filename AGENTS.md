@@ -36,6 +36,12 @@ room.send('move', { x, y });                                 // to everyone
 
 ## Recipes
 
+A video/audio call (any transport): `import { call } from './vendor/p2p-core/extras/call.js'`, then
+`const c = call(room, { stream: await navigator.mediaDevices.getUserMedia({ audio: true, video: true }) })`,
+`c.onStream((id, stream) => video.srcObject = stream)`, `c.onLeave(id => …)`, `c.setState({ audio: false })`,
+`await c.setStream(screenStream)` to share a screen, `c.hangUp()`. Do not use `room.addStream` for calls: it only works over the internet relays.
+
+
 Same browser only (two tabs, offline): `joinRoom({ app, mode: 'tabs' })`
 
 No internet, one laptop on the Wi-Fi: run `npx p2p-core serve <game folder>`, everyone opens the

@@ -1,6 +1,6 @@
 {
   "name": "p2p-core",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Multiplayer for no-build browser games: other tabs, the internet, a local server with no internet, or QR-code pairing — one API, built on trystero.",
   "type": "module",
   "main": "./p2p-core.js",

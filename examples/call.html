@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>p2p-core call</title>
+<style>
+body{font:15px system-ui;margin:16px;background:#111;color:#eee}#grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px}
+video{width:100%;aspect-ratio:16/9;background:#000;border-radius:8px;object-fit:cover}figure{margin:0}figcaption{font-size:12px;opacity:.7}
+button{font:inherit;padding:6px 12px;margin:4px 4px 12px 0;border-radius:6px;border:0}
+</style>
+</head>
+<body>
+<h1>Call</h1>
+<p>Open this page in two tabs or on two devices with the same <code>#room</code>. Everyone in the room is in the call.</p>
+<button id="mic">Mute</button><button id="cam">Camera off</button><button id="screen">Share screen</button><button id="leave">Hang up</button>
+<div id="grid"><figure><video id="me" autoplay muted playsinline></video><figcaption>You</figcaption></figure></div>
+<script type="module">
+import { joinRoom } from '../p2p-core.js';
+import { call } from '../extras/call.js';
+
+const params = new URLSearchParams(location.search);
+const room = joinRoom({ app: 'p2p-core-call-demo', room: location.hash.slice(1) || 'lobby', mode: params.get('mode') || 'auto' });
+const media = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+document.querySelector('#me').srcObject = media;
+const c = call(room, { stream: media, rtcConfig: { iceServers: [] } });
+window.room = room;
+window.call = c;
+window.remote = new Map();
+
+c.onStream((id, stream) => {
+  const fig = document.createElement('figure');
+  fig.id = 'peer-' + id;
+  const video = Object.assign(document.createElement('video'), { autoplay: true, playsInline: true, srcObject: stream });
+  fig.append(video, Object.assign(document.createElement('figcaption'), { textContent: id }));
+  document.querySelector('#grid').append(fig);
+  window.remote.set(id, stream);
+});
+c.onLeave((id) => { document.getElementById('peer-' + id)?.remove(); window.remote.delete(id); });
+c.onState((id, s) => {
+  const cap = document.querySelector(`#peer-${id} figcaption`);
+  if (cap) cap.textContent = id + (s.audio === false ? ' · muted' : '') + (s.video === false ? ' · camera off' : '');
+});
+
+let micOn = true, camOn = true, screen = null;
+document.querySelector('#mic').onclick = (e) => {
+  micOn = !micOn;
+  media.getAudioTracks().forEach((t) => { t.enabled = micOn; });
+  c.setState({ audio: micOn });
+  e.target.textContent = micOn ? 'Mute' : 'Unmute';
+};
+document.querySelector('#cam').onclick = (e) => {
+  camOn = !camOn;
+  media.getVideoTracks().forEach((t) => { t.enabled = camOn; });
+  c.setState({ video: camOn });
+  e.target.textContent = camOn ? 'Camera off' : 'Camera on';
+};
+document.querySelector('#screen').onclick = async (e) => {
+  if (screen) {
+    screen.getTracks().forEach((t) => t.stop());
+    screen = null;
+    await c.setStream(media);
+    c.setState({ screen: false });
+    e.target.textContent = 'Share screen';
+    return;
+  }
+  screen = await navigator.mediaDevices.getDisplayMedia({ video: true });
+  await c.setStream(new MediaStream([...media.getAudioTracks(), ...screen.getVideoTracks()]));
+  c.setState({ screen: true });
+  e.target.textContent = 'Stop sharing';
+};
+document.querySelector('#leave').onclick = () => { c.hangUp(); room.leave(); };
+</script>
+</body>
+</html>

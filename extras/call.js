@@ -53,8 +53,24 @@ export function isOfferer(selfId, peerId) {
  * Tailscale: more video bitrate and frame rate, keep the resolution when the
  * link wobbles, and stereo high-bitrate Opus with forward error correction.
  * Ceilings only: WebRTC's congestion control still backs off on a bad link.
+ *
+ * To save data on a phone plan: 'saver' (about 250 kbps video at 15 fps and half
+ * resolution, 24 kbps mono audio) or 'audio' (no video at all). Each person's
+ * choice is sent to the others, and every link uses the lower of the two sides'
+ * presets, so saving works in both directions: what you send and what you get.
  */
+export const QUALITY_ORDER = ['audio', 'saver', 'auto', 'high', 'max'];
+
+/** The preset a link between two people uses: the lower of the two. */
+export function linkQuality(mine, theirs) {
+  const rank = (n) => QUALITY_ORDER.indexOf(n);
+  if (rank(theirs) < 0) return mine;
+  if (rank(mine) < 0) return rank(theirs) <= rank('saver') ? theirs : mine; // a custom object, unless they need saving
+  return rank(theirs) < rank(mine) ? theirs : mine;
+}
 export const QUALITY = {
+  audio: { video: false, audioBitrate: 24_000, stereo: false },
+  saver: { videoBitrate: 250_000, screenBitrate: 500_000, fps: 15, scale: 2, audioBitrate: 24_000, stereo: false, degradation: 'maintain-framerate' },
   auto: null,
   high: { videoBitrate: 2_500_000, screenBitrate: 4_000_000, fps: 30, audioBitrate: 96_000, stereo: false, degradation: 'balanced' },
   max: { videoBitrate: 6_000_000, screenBitrate: 8_000_000, fps: 60, audioBitrate: 128_000, stereo: true, degradation: 'maintain-resolution' },
@@ -89,7 +105,9 @@ export function call(room, {
   const links = new Map();               // peerId -> link
   const handlers = { stream: [], leave: [], state: [], connection: [] };
   const emit = (name, ...args) => { for (const fn of handlers[name]) { try { fn(...args); } catch (err) { console.error(err); } } };
-  const q = typeof quality === 'object' ? quality : QUALITY[quality] ?? null;
+  let qName = typeof quality === 'object' && quality ? quality : (quality in QUALITY ? quality : 'auto');
+  const presetOf = (name) => (typeof name === 'object' ? name : QUALITY[name] ?? null);
+  const q = presetOf(qName); // what we ask for in the SDP at negotiation time
   let local = stream;
   let sharing = false;
   let mine = cleanState(state) || {};
@@ -104,17 +122,24 @@ export function call(room, {
   };
   // Raise the sending ceilings once a link is up (encodings exist only after negotiation).
   async function tune(link) {
-    if (!q) return;
+    const p = presetOf(linkQuality(qName, link.want));
     for (const [k, t] of Object.entries(slots(link))) {
       const params = t.sender.getParameters();
       if (!params.encodings?.length) continue;
       const enc = params.encodings[0];
+      // Start from the browser's defaults, then apply the preset's ceilings.
+      for (const f of ['maxBitrate', 'maxFramerate', 'scaleResolutionDownBy']) delete enc[f];
+      enc.active = true;
       if (k === 'video') {
-        enc.maxBitrate = sharing ? q.screenBitrate : q.videoBitrate;
-        enc.maxFramerate = q.fps;
-        params.degradationPreference = sharing ? 'maintain-resolution' : q.degradation;
-      } else {
-        enc.maxBitrate = q.audioBitrate;
+        if (p && p.video === false) enc.active = false;
+        else if (p) {
+          enc.maxBitrate = sharing ? p.screenBitrate : p.videoBitrate;
+          enc.maxFramerate = p.fps;
+          if (p.scale && !sharing) enc.scaleResolutionDownBy = p.scale;
+          params.degradationPreference = sharing ? 'maintain-resolution' : p.degradation;
+        }
+      } else if (p) {
+        enc.maxBitrate = p.audioBitrate;
         enc.priority = 'high';
         enc.networkPriority = 'high';
       }
@@ -175,7 +200,7 @@ export function call(room, {
       pc.addTransceiver(trackOf('audio') || 'audio', { direction: 'sendrecv' });
       pc.addTransceiver(trackOf('video') || 'video', { direction: 'sendrecv' });
     }
-    send({ s: mine }, id);
+    send({ s: mine, w: typeof qName === 'string' ? qName : 'custom' }, id);
     return link;
   }
 
@@ -193,6 +218,10 @@ export function call(room, {
     const link = open(from);
     if (!link) return;
     const { pc } = link;
+    if (typeof data.w === 'string' && (data.w in QUALITY || data.w === 'custom')) {
+      link.want = data.w;
+      if (pc.connectionState === 'connected') tune(link);
+    }
     if ('s' in data) {
       const s = cleanState(data.s);
       if (s) { link.state = s; emit('state', from, s); }
@@ -239,7 +268,15 @@ export function call(room, {
     },
     state: () => ({ ...mine }),
     /** The sending ceilings in use (null for 'auto'). */
-    quality: () => (q ? { ...q } : null),
+    quality: () => { const p = presetOf(qName); return p ? { ...p } : null; },
+    qualityName: () => (typeof qName === 'string' ? qName : 'custom'),
+    /** Switch preset mid-call ('audio', 'saver', 'auto', 'high', 'max'); everyone adapts what they send you. */
+    async setQuality(name) {
+      if (!(name in QUALITY)) throw new Error('p2p-core call: unknown quality "' + name + '"');
+      qName = name;
+      send({ w: name });
+      await Promise.all([...links.values()].map(tune));
+    },
     peers: () => [...links.values()].map((l) => ({ id: l.id, stream: l.remote, state: { ...l.state }, connection: l.pc.connectionState })),
     onStream: (fn) => { handlers.stream.push(fn); return () => { handlers.stream = handlers.stream.filter((f) => f !== fn); }; },
     onLeave: (fn) => { handlers.leave.push(fn); return () => { handlers.leave = handlers.leave.filter((f) => f !== fn); }; },

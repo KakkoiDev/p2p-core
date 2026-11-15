@@ -39,7 +39,7 @@ room.send('move', { x, y });                                 // to everyone
 A video/audio call (any transport): `import { call } from './vendor/p2p-core/extras/call.js'`, then
 `const c = call(room, { stream: await navigator.mediaDevices.getUserMedia({ audio: true, video: true }) })`,
 `c.onStream((id, stream) => video.srcObject = stream)`, `c.onLeave(id => …)`, `c.setState({ audio: false })`,
-`await c.setStream(screenStream, { screen: true })` to share a screen, `c.hangUp()`. On a LAN or VPN pass `quality: 'max'`. Do not use `room.addStream` for calls: it only works over the internet relays.
+`await c.setStream(screenStream, { screen: true })` to share a screen, `c.hangUp()`. On a LAN or VPN pass `quality: 'max'`; on a phone plan `c.setQuality('saver')` or `'audio'`. Do not use `room.addStream` for calls: it only works over the internet relays.
 
 
 Same browser only (two tabs, offline): `joinRoom({ app, mode: 'tabs' })`

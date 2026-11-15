@@ -7,6 +7,8 @@
   renegotiation, mute/camera/screen state, hang up). `examples/call.html`, Node and Chromium tests.
 - Call quality presets (`quality: 'auto' | 'high' | 'max'`): sender bitrate and frame-rate ceilings,
   resolution kept under load, stereo high-bitrate Opus with FEC requested through the SDP.
+- Data saving: `'saver'` and `'audio'` presets, `setQuality()` mid-call, and each link using the
+  lower of the two people's presets so a phone on a data plan also receives less.
 - README: the server protocol, for apps that host the room themselves (DropBox does).
 - `p2p-core vendor` prints a clean import path when folders sit behind symlinks (macOS temp dirs).
 

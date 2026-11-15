@@ -160,6 +160,16 @@ try {
     check(senderParams.some((p) => p.kind === 'video' && p.max === 6_000_000) && senderParams.some((p) => p.kind === 'audio' && p.max === 128_000), 'video and audio senders run with the raised ceilings', JSON.stringify(senderParams));
     const stereo = await b.evaluate(() => (window.__pcs || []).some((pc) => /stereo=1/.test(pc.currentRemoteDescription?.sdp || '')));
     check(stereo, 'the other side is asked for stereo high-bitrate Opus');
+    // Data saver: ben picks 'saver', so ann sends him less; 'audio' stops video to him.
+    await b.evaluate(() => window.call.setQuality('saver'));
+    check(await a.waitForFunction(() => (window.__pcs || []).some((pc) => pc.getSenders().some((s) => s.getParameters().encodings?.[0]?.maxBitrate === 250000 && s.getParameters().encodings?.[0]?.scaleResolutionDownBy === 2)), null, { timeout: 5000 }).then(() => true, () => false),
+      'when the other side picks data saver, video sent to it drops to 250 kbps at half resolution');
+    await b.evaluate(() => window.call.setQuality('audio'));
+    check(await a.waitForFunction(() => (window.__pcs || []).some((pc) => pc.getSenders().some((s) => s.getParameters().encodings?.[0]?.active === false)), null, { timeout: 5000 }).then(() => true, () => false),
+      "'audio' stops video being sent to that side");
+    await b.evaluate(() => window.call.setQuality('max'));
+    check(await a.waitForFunction(() => (window.__pcs || []).some((pc) => pc.getSenders().some((s) => s.getParameters().encodings?.[0]?.maxBitrate === 6000000 && s.getParameters().encodings?.[0]?.active !== false)), null, { timeout: 5000 }).then(() => true, () => false),
+      'switching back restores full quality');
     await a.evaluate(() => window.call.setState({ audio: false }));
     check(await b.waitForFunction(() => window.call.peers()[0]?.state.audio === false, null, { timeout: 5000 }).then(() => true, () => false), 'muting is announced to the other side');
     const swapped = await a.evaluate(async () => {

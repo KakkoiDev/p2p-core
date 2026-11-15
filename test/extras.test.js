@@ -255,3 +255,15 @@ test('call: quality presets rewrite Opus in the SDP we send', async () => {
   assert.match(tuneOpus('a=rtpmap:96 opus/48000/2\r\n', QUALITY.high), /a=fmtp:96 useinbandfec=1;usedtx=0;maxaveragebitrate=96000\r\n/);
   assert.equal(tuneOpus('m=video 9\r\n', QUALITY.max), 'm=video 9\r\n');
 });
+
+test('call: a link uses the lower of the two sides\' quality', async () => {
+  const { linkQuality } = await import('../extras/call.js');
+  assert.equal(linkQuality('max', 'saver'), 'saver');
+  assert.equal(linkQuality('saver', 'max'), 'saver');
+  assert.equal(linkQuality('max', undefined), 'max');
+  assert.equal(linkQuality('high', 'audio'), 'audio');
+  assert.equal(linkQuality('auto', 'max'), 'auto');
+  const custom = { videoBitrate: 1 };
+  assert.equal(linkQuality(custom, 'max'), custom);
+  assert.equal(linkQuality(custom, 'saver'), 'saver');
+});

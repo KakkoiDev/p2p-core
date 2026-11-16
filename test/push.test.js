@@ -16,7 +16,7 @@ test('push encryption matches the worked example of RFC 8291', () => {
 
 test('the VAPID token is signed by the pusher, for the push service origin', () => {
   const pusher = createPusher({ subject: 'mailto:test@example.com' });
-  const again = createPusher({ privateKey: pusher.privateKey });
+  const again = createPusher({ privateKey: pusher.privateKey, subject: 'mailto:test@example.com' });
   assert.equal(again.publicKey, pusher.publicKey, 'a saved key gives the same identity');
   const fake = { endpoint: 'https://fcm.googleapis.com/fcm/send/abc' };
   let token;
@@ -64,7 +64,7 @@ test('send: the browser can decrypt the message; headers ask for a short, urgent
   const browser = browserKeys();
   let seen;
   const pusher = createPusher({
-    allowEndpoint: () => true,
+    subject: 'https://example.com', allowEndpoint: () => true,
     fetch: async (url, init) => { seen = { url, init }; return { status: 201 }; },
   });
   const r = await pusher.send({ endpoint: 'https://fcm.googleapis.com/fcm/send/x', keys: browser.keys }, { kind: 'call', title: 'Ann is calling' });
@@ -76,7 +76,7 @@ test('send: the browser can decrypt the message; headers ask for a short, urgent
 });
 
 test('send: a gone subscription is reported so the app forgets it', async () => {
-  const pusher = createPusher({ allowEndpoint: () => true, fetch: async () => ({ status: 410 }) });
+  const pusher = createPusher({ subject: 'https://example.com', allowEndpoint: () => true, fetch: async () => ({ status: 410 }) });
   const r = await pusher.send({ endpoint: 'https://fcm.googleapis.com/x', keys: browserKeys().keys }, {});
   assert.equal(r.gone, true);
   assert.equal(r.ok, false);
@@ -101,8 +101,14 @@ test('only real push services are accepted, and refusals say why', async () => {
   assert.equal(refusal({ endpoint: 'https://fcm.googleapis.com/x', keys }), '');
   // The real sender never posts to a refused address.
   let posted = false;
-  const pusher = createPusher({ fetch: async () => { posted = true; return { status: 201 }; } });
+  const pusher = createPusher({ subject: 'https://example.com', fetch: async () => { posted = true; return { status: 201 }; } });
   const r = await pusher.send({ endpoint: 'https://127.0.0.1/x', keys }, {});
   assert.equal(posted, false);
   assert.equal(r.ok, false);
+});
+
+test('a placeholder contact is refused up front (Apple answers BadJwtToken to it)', () => {
+  assert.throws(() => createPusher({ subject: 'mailto:push@localhost' }), /real contact/);
+  assert.throws(() => createPusher({}), /real contact/);
+  assert.ok(createPusher({ subject: 'https://example.com' }).publicKey);
 });

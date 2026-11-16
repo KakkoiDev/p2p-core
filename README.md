@@ -341,7 +341,7 @@ use Web Push: `extras/ring.js` in the page, `extras/ring-sw.js` in your service 
 ```js
 // server (Node)
 import { createPusher, refusal } from 'p2p-core/server/push';
-const pusher = createPusher({ privateKey: saved, subject: 'mailto:you@example.com' }); // save pusher.privateKey once
+const pusher = createPusher({ privateKey: saved, subject: 'mailto:you@example.com' }); // save pusher.privateKey once; subject must be real (Apple rejects …@localhost)
 // POST /push/subscribe: refusal(sub) === '' → store sub for this person
 // POST /push/probe:     const r = await pusher.send(sub, { kind: 'test', title: 'This browser can ring' }); answer { ok: r.ok, why: r.why }
 // to ring someone:      for (const sub of theirs) { const r = await pusher.send(sub, { kind: 'call', title: 'Ann is calling', url: '/call' }); if (r.gone) forget(sub); }

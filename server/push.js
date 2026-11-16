@@ -101,7 +101,12 @@ export function vapidToken(endpoint, { key, subject, now = Date.now() }) {
  * (omit it once to make one, then save it). `subject` is a contact for the push services.
  * `fetch` and `allowEndpoint` are for tests.
  */
-export function createPusher({ privateKey, subject = 'mailto:push@localhost', fetch: fetchFn = globalThis.fetch, allowEndpoint = allowedEndpoint } = {}) {
+export function createPusher({ privateKey, subject, fetch: fetchFn = globalThis.fetch, allowEndpoint = allowedEndpoint } = {}) {
+  // A real contact is required: Apple's push service answers 403 BadJwtToken to placeholders
+  // such as mailto:…@localhost, so Safari would never ring.
+  if (!/^(mailto:[^@\s]+@[^@\s]+\.[a-z]{2,}|https:\/\/[^\s/]+\.[a-z]{2,})/i.test(String(subject || '')) || /localhost/i.test(String(subject))) {
+    throw new Error('p2p-core push: pass subject, a real contact (mailto:you@example.com or https://your.site); Apple rejects placeholders such as mailto:…@localhost');
+  }
   const keys = keyPair(privateKey);
   return {
     publicKey: keys.publicKey,

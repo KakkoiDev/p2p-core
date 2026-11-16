@@ -12,7 +12,7 @@ import { createPusher, refusal } from '../server/push.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css' };
-const pusher = createPusher({ subject: 'mailto:example@localhost' });
+const pusher = createPusher({ subject: 'https://example.com' }); // use your own site or mailto: address
 const subs = new Map(); // endpoint -> subscription
 
 async function body(req) {

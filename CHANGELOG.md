@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- `extras/ring.js`: ring people for calls while the page is closed (Web Push). `ringing()` subscribes,
+  saves and **probes** with one real test push, remembering whether this browser can ring
+  (some Chromium builds pose as Google Chrome yet never receive pushes). `installer()` offers the
+  one-click install only where ringing works; `advice()`, `platform()` for the steps to show instead.
+- `extras/ring-sw.js`: the service-worker side (ringing notification with Join / Dismiss).
+- `server/push.js` (`p2p-core/server/push`): Web Push sending with Node built-ins: RFC 8291
+  aes128gcm encryption, VAPID (RFC 8292), an allow-list of real push services, `gone` reporting.
+- `examples/ring.html` with `examples/ring-server.mjs`. Tests include the RFC 8291 worked example.
+
 ## 0.2.0 — 2026-11-15
 
 - `extras/call.js`: audio/video calls (full mesh) over every transport, negotiated through room

@@ -250,3 +250,40 @@ export interface Call {
   onConnection(fn: (id: string, state: RTCPeerConnectionState) => void): () => void;
   hangUp(): void;
 }
+
+// extras/ring.js
+export interface PushSubscriptionJSONLike { endpoint: string; keys: { p256dh: string; auth: string } }
+export interface Ringing {
+  supported(): boolean;
+  /** 'yes' / 'no' once probed on this browser, '' before. */
+  capability(): 'yes' | 'no' | '';
+  /** Probed yes, or not probed yet on a browser without brand list (Safari, Firefox). */
+  likely(): boolean;
+  subscription(): Promise<PushSubscription | null>;
+  enabled(): Promise<boolean>;
+  /** Permission, subscribe, save, then one real test push through your server. */
+  enable(): Promise<{ ok: boolean; why: string }>;
+  disable(): Promise<void>;
+}
+export function ringing(options: {
+  publicKey: string;
+  save(sub: PushSubscriptionJSONLike): Promise<unknown>;
+  forget?(sub: PushSubscriptionJSONLike): Promise<unknown>;
+  probe(sub: PushSubscriptionJSONLike): Promise<{ ok: boolean; why?: string }>;
+  workerReady?(): Promise<ServiceWorkerRegistration>;
+}): Ringing;
+export interface Installer {
+  readonly available: boolean;
+  readonly installed: boolean;
+  /** available, and ringing works here. */
+  readonly recommended: boolean;
+  onChange(fn: (installer: Installer) => void): () => void;
+  prompt(): Promise<'accepted' | 'dismissed' | 'unavailable'>;
+  refresh(): void;
+  stop(): void;
+}
+export function installer(options?: { ring?: Ringing; win?: Window }): Installer;
+export function platform(nav?: Navigator): 'android' | 'ios' | 'mac' | 'desktop';
+export function advice(where?: 'android' | 'ios' | 'mac' | 'desktop'): string;
+export function keyBytes(base64url: string): Uint8Array;
+export function runningInstalled(win?: Window): boolean;

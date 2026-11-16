@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>p2p-core ringing</title>
+<style>
+body{font:15px system-ui;margin:16px;max-width:640px;background:#111;color:#eee}
+button{font:inherit;padding:8px 14px;margin:4px 6px 8px 0;border-radius:8px;border:0}
+#status{min-height:3em;opacity:.85}
+</style>
+</head>
+<body>
+<h1>Ringing</h1>
+<p>Run <code>node examples/ring-server.mjs</code>, open this page, press <b>Turn on ringing</b>, then close the
+tab and press <b>Ring me</b> from another tab or device. Some browsers install web apps fine but never ring:
+<b>Turn on ringing</b> checks this browser for real with one test notification.</p>
+<button id="enable">Turn on ringing</button><button id="disable" hidden>Turn off</button>
+<button id="ring">Ring me</button><button id="install" hidden>Install</button>
+<p id="status"></p>
+<script type="module">
+import { ringing, installer, advice } from '../extras/ring.js';
+
+const $ = (s) => document.querySelector(s);
+const post = (path, data) => fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+  .then(async (r) => { const out = await r.json(); if (!r.ok) throw new Error(out.error || r.status); return out; });
+
+await navigator.serviceWorker.register('./ring-worker.js');
+const { key } = await (await fetch('/push/key')).json();
+const ring = ringing({
+  publicKey: key,
+  save: (sub) => post('/push/subscribe', sub),
+  forget: (sub) => post('/push/unsubscribe', sub),
+  probe: (sub) => post('/push/probe', sub),
+});
+const install = installer({ ring });
+
+async function paint(text) {
+  const on = await ring.enabled();
+  $('#enable').hidden = on;
+  $('#disable').hidden = !on;
+  $('#install').hidden = !install.available;
+  $('#install').textContent = install.recommended ? 'Install' : 'Install anyway (no ringing here)';
+  $('#status').textContent = text ?? (!ring.supported() ? 'This browser cannot receive notifications here.'
+    : ring.capability() === 'no' ? 'This browser cannot ring. ' + advice()
+    : on ? 'This browser rings.' : 'Ringing is off.');
+}
+install.onChange(() => paint());
+$('#enable').onclick = async () => {
+  $('#status').textContent = 'Checking… allow notifications if asked.';
+  const { ok, why } = await ring.enable();
+  install.refresh();
+  paint(ok ? 'This browser rings: you should see a test notification.' : 'Not on: ' + why + '. ' + (ring.capability() === 'no' ? advice() : ''));
+};
+$('#disable').onclick = async () => { await ring.disable(); paint(); };
+$('#ring').onclick = async () => { const r = await post('/push/ring', {}); paint(`Rang ${r.rang} of ${r.of} browsers.`); };
+$('#install').onclick = () => install.prompt();
+paint();
+</script>
+</body>
+</html>

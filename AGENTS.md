@@ -42,6 +42,8 @@ A video/audio call (any transport): `import { call } from './vendor/p2p-core/ext
 `await c.setStream(screenStream, { screen: true })` to share a screen, `c.hangUp()`. On a LAN or VPN pass `quality: 'max'`; on a phone plan `c.setQuality('saver')` or `'audio'`. Do not use `room.addStream` for calls: it only works over the internet relays.
 
 
+Ringing a closed page (Web Push): `ringing({ publicKey, save, probe })` from `extras/ring.js`, `importScripts('…/extras/ring-sw.js')` in the service worker, `createPusher()` from `p2p-core/server/push` on the server. Never decide that a browser can ring from its name (some Chromium builds pose as Google Chrome without push): call `ring.enable()`, which sends one real test push, and show install with `installer({ ring }).recommended`.
+
 Same browser only (two tabs, offline): `joinRoom({ app, mode: 'tabs' })`
 
 No internet, one laptop on the Wi-Fi: run `npx p2p-core serve <game folder>`, everyone opens the

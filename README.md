@@ -316,6 +316,7 @@ Optional modules in `extras/`, each usable on its own:
 | `pairing-ui.js` — `openPairing(room)` | the pairing dialog. Styled by `ui.css`; restyle with `--p2p-*` variables. |
 | `status-ui.js` — `connectionBadge(room)`, `describeStatus`, `diagnose` | one line saying who is here and how, and what is likely wrong when nobody is. |
 | `qr.js` — `qrSvg`, `scanQr`, `readQrFromImage` | draw and read QR codes. |
+| `ring.js` — `ringing({ publicKey, save, probe })`, `installer({ ring })` | ring people for a call while the page is closed (Web Push), and offer the one-click install only where ringing works. Server side in `server/push.js`, service-worker side in `ring-sw.js`. See [Ringing](#ringing-calls-while-the-page-is-closed). |
 | `call.js` — `call(room, { stream, quality })` | audio and video calls (Meet-style mesh) over **any** transport: the WebRTC handshake goes through room messages, media goes peer to peer. `quality: 'audio' \| 'saver' \| 'auto' \| 'high' \| 'max'`: 'max'/'high' raise bitrate/frame-rate ceilings and ask for stereo high-bitrate Opus with FEC (LAN/Tailscale); 'saver' (~250 kbps video, 15 fps, half resolution, 24 kbps audio) and 'audio' (no video) save mobile data in **both** directions, because each link uses the lower of the two people's presets. `setQuality(name)` switches mid-call without renegotiating. Mute/camera state, screen sharing by swapping tracks (`setStream(s, { screen: true })`), hang up. |
 
 ```js
@@ -328,6 +329,56 @@ match.send('move', move);
 
 `examples/index.html` (a playground with dots, chat and pairing), `examples/match.html` (rock
 paper scissors) and `examples/call.html` (a video call) use all of it. `npm run serve`, then open `/examples/`.
+
+---
+
+## Ringing calls while the page is closed
+
+`extras/call.js` connects people who have the page open. To *ring* someone whose page is closed,
+use Web Push: `extras/ring.js` in the page, `extras/ring-sw.js` in your service worker and
+`server/push.js` on your server (Node built-ins only: RFC 8291 encryption, VAPID).
+
+```js
+// server (Node)
+import { createPusher, refusal } from 'p2p-core/server/push';
+const pusher = createPusher({ privateKey: saved, subject: 'mailto:you@example.com' }); // save pusher.privateKey once; subject must be real (Apple rejects …@localhost)
+// POST /push/subscribe: refusal(sub) === '' → store sub for this person
+// POST /push/probe:     const r = await pusher.send(sub, { kind: 'test', title: 'This browser can ring' }); answer { ok: r.ok, why: r.why }
+// to ring someone:      for (const sub of theirs) { const r = await pusher.send(sub, { kind: 'call', title: 'Ann is calling', url: '/call' }); if (r.gone) forget(sub); }
+```
+
+```js
+// page
+import { ringing, installer, advice } from './vendor/p2p-core/extras/ring.js';
+const ring = ringing({ publicKey, save: (s) => post('/push/subscribe', s), forget: (s) => post('/push/unsubscribe', s), probe: (s) => post('/push/probe', s) });
+const { ok, why } = await ring.enable();           // permission → subscribe → save → one real test push
+const install = installer({ ring });               // create at page start
+install.onChange(() => { installButton.hidden = !install.recommended; });
+```
+
+```js
+// service worker (classic script, every browser)
+importScripts('/vendor/p2p-core/extras/ring-sw.js'); // shows { kind, title, body, url, tag }; 'call' rings with Join / Dismiss
+```
+
+**Probe, don't guess.** Some Chromium builds report themselves exactly as Google Chrome (same
+`userAgentData.brands`, user agent and vendor) but have no working push service: the app
+installs, notifications look on, and nothing ever rings. So `enable()` pushes one real message
+through your server and remembers the answer on that browser (`ring.capability()`: `'yes'`,
+`'no'`, or `''` before). `ring.likely()` is true after a successful probe, or before any probe on
+browsers with no brand list (Safari, Firefox), which have push. `installer().recommended` is true
+only where the browser can install the app *and* ring; elsewhere show `advice()` (for example
+"on a Mac, install from Safari, Chrome or Edge") and perhaps an "install anyway" button.
+
+Other things worth knowing:
+- `server/push.js` only posts to real push services (Google, Mozilla, Apple, Microsoft), because
+  a subscription names a URL your server will POST to. `refusal(sub)` explains a rejected one,
+  including placeholder addresses such as `https://permanently-removed.invalid/…`.
+- A push for a call is sent with `TTL: 60` and `Urgency: high`; `send()` reports `gone` when the
+  push service no longer knows the browser (HTTP 404/410): forget that subscription.
+- Notification permission refused is not remembered as "cannot ring": the person may allow it later.
+  A failure of your own server is not either; only a failed subscribe or a push that is not delivered is.
+- `examples/ring.html` with `node examples/ring-server.mjs` (localhost needs no HTTPS) shows it all.
 
 ---
 

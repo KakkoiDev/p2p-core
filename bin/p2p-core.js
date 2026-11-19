@@ -27,6 +27,7 @@ const pkg = JSON.parse(await fs.readFile(path.join(ROOT, 'package.json'), 'utf8'
 
 /** What a browser needs. The server, the CLI and the tests stay behind. */
 const BROWSER = ['p2p-core.js', 'p2p-core.d.ts', 'src', 'extras', 'vendor', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'README.md', 'AGENTS.md', 'package.json'];
+const NODE_ONLY = new Set(['extras/node-media.js']);
 /** Not worth precaching: documentation, types, licences and the lazily loaded QR scanner. */
 const NOT_RUNTIME = /\.(md|d\.ts)$|LICENSE|package\.json$|vendor\/jsqr\//;
 
@@ -63,7 +64,7 @@ async function browserFiles() {
     if (stat.isDirectory()) out.push(...(await listFiles(ROOT, item)));
     else out.push(item);
   }
-  return out.sort();
+  return out.filter((file) => !NODE_ONLY.has(file)).sort();
 }
 
 const { positional, flags } = parseArgs(process.argv.slice(2));

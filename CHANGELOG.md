@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- `extras/node-media.js`: Node-side ffmpeg camera and microphone capture, including AVFoundation
+  `uyvy422` camera input, realtime test sources, raw byte splitting, and binary rgb24 video / s16le
+  audio message framing, plus low-latency PCM playback through ffplay.
+
 ## 0.2.0 — 2026-11-15
 
 - `extras/call.js`: audio/video calls (full mesh) over every transport, negotiated through room

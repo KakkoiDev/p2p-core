@@ -317,6 +317,7 @@ Optional modules in `extras/`, each usable on its own:
 | `status-ui.js` — `connectionBadge(room)`, `describeStatus`, `diagnose` | one line saying who is here and how, and what is likely wrong when nobody is. |
 | `qr.js` — `qrSvg`, `scanQr`, `readQrFromImage` | draw and read QR codes. |
 | `call.js` — `call(room, { stream, quality })` | audio and video calls (Meet-style mesh) over **any** transport: the WebRTC handshake goes through room messages, media goes peer to peer. `quality: 'audio' \| 'saver' \| 'auto' \| 'high' \| 'max'`: 'max'/'high' raise bitrate/frame-rate ceilings and ask for stereo high-bitrate Opus with FEC (LAN/Tailscale); 'saver' (~250 kbps video, 15 fps, half resolution, 24 kbps audio) and 'audio' (no video) save mobile data in **both** directions, because each link uses the lower of the two people's presets. `setQuality(name)` switches mid-call without renegotiating. Mute/camera state, screen sharing by swapping tracks (`setStream(s, { screen: true })`), hang up. |
+| `node-media.js` — `captureVideo`, `captureAudio`, `createAudioPlayer` | Node-only raw media through ffmpeg/ffplay: AVFoundation camera/microphone or realtime test sources, rgb24 video and mono s16le audio packed for binary room messages, and low-latency PCM playback. |
 
 ```js
 import { matchmake } from './vendor/p2p-core/extras/matchmaking.js';
@@ -324,6 +325,25 @@ const match = matchmake(joinRoom({ app: 'chess', room: `match-${gameId}` }));
 match.onMatch(({ host }) => start(host ? 'white' : 'black'));
 match.on('move', apply);
 match.send('move', move);
+```
+
+Node apps without browser media APIs can send raw ffmpeg capture as data messages. Camera capture
+uses AVFoundation with `uyvy422` input (needed by cameras that reject ffmpeg's default), then emits
+packed rgb24 frames. Audio emits 40 ms mono s16le chunks by default. Keep dimensions within the
+room's `maxMessageBytes`, validate incoming messages, and expect raw media to suit LANs rather than
+lossy links.
+
+```js
+import { captureVideo, createAudioPlayer, unpackVideoFrame } from 'p2p-core/extras/node-media.js';
+
+const camera = captureVideo({ width: 80, height: 48, fps: 10 }, (message) => room.send('vid', message));
+room.onMessage('vid', (message) => {
+  const frame = unpackVideoFrame(message);
+  if (frame) draw(frame.width, frame.height, frame.data);
+});
+const speaker = createAudioPlayer();
+room.onMessage('aud', (message) => speaker.write(message));
+// camera.kill() when done
 ```
 
 `examples/index.html` (a playground with dots, chat and pairing), `examples/match.html` (rock

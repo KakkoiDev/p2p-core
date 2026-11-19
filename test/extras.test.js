@@ -191,6 +191,7 @@ test('cli: vendor copies the browser files, and files lists them', async () => {
       assert.ok(await stat(path.join(dir, 'vendor/p2p-core', file)), file);
     }
     await assert.rejects(stat(path.join(dir, 'vendor/p2p-core/server')), 'the server stays out of the browser copy');
+    await assert.rejects(stat(path.join(dir, 'vendor/p2p-core/extras/node-media.js')), 'Node media stays out of the browser copy');
     const { stdout: files } = await exec(process.execPath, [bin, 'files', './x/']);
     const list = files.trim().split('\n');
     assert.ok(list.includes('./x/p2p-core.js'));

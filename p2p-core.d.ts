@@ -250,3 +250,37 @@ export interface Call {
   onConnection(fn: (id: string, state: RTCPeerConnectionState) => void): () => void;
   hangUp(): void;
 }
+
+// extras/node-media.js (Node only)
+export interface NodeVideoCaptureOptions {
+  video?: 'camera' | 'test' | `lavfi:${string}`;
+  camera?: string;
+  width: number;
+  height: number;
+  fps: number;
+  command?: string;
+  onError?: (error: Error) => void;
+}
+export interface NodeAudioCaptureOptions {
+  audio?: 'mic' | 'test';
+  mic?: string;
+  rate?: number;
+  chunkMs?: number;
+  command?: string;
+  onError?: (error: Error) => void;
+}
+export interface PackedVideoFrame { width: number; height: number; data: Uint8Array }
+export function videoInputArgs(options: Required<Pick<NodeVideoCaptureOptions, 'video' | 'camera' | 'width' | 'height' | 'fps'>>): string[];
+export function audioInputArgs(options: Required<Pick<NodeAudioCaptureOptions, 'audio' | 'mic' | 'rate'>>): string[];
+export function audioOutputArgs(options: { rate: number }): string[];
+export function splitBytes(size: number, onChunk: (chunk: Uint8Array) => void): (chunk: Uint8Array) => void;
+export function packVideoFrame(frame: PackedVideoFrame): Uint8Array;
+export function unpackVideoFrame(message: unknown): PackedVideoFrame | null;
+export function packAudioChunk(pcm: Uint8Array): Uint8Array;
+export function unpackAudioChunk(message: unknown): Uint8Array | null;
+/** Returns ffmpeg's ChildProcess without requiring Node types in this declaration file. */
+export function captureVideo(options: NodeVideoCaptureOptions, onFrame: (message: Uint8Array) => void): unknown;
+/** Returns ffmpeg's ChildProcess without requiring Node types in this declaration file. */
+export function captureAudio(options: NodeAudioCaptureOptions, onChunk: (message: Uint8Array) => void): unknown;
+export interface NodeAudioPlayer { write(message: unknown): boolean; stop(): void }
+export function createAudioPlayer(options?: { rate?: number; command?: string; onError?: (error: Error) => void }): NodeAudioPlayer;
